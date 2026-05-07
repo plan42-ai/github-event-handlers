@@ -12,6 +12,11 @@ import (
 	"github.com/plan42-ai/sdk-go/p42"
 )
 
+const (
+	installationActionDeleted = "deleted"
+	installationActionCreated = "created"
+)
+
 func newInstallationHandler(cfg Config) func(ctx context.Context, evt Event, gh github.API) {
 	h := &installationHandler{
 		appSlug: strings.TrimSpace(cfg.GithubAppName),
@@ -106,9 +111,9 @@ func (h *installationHandler) handle(ctx context.Context, evt Event, _ github.AP
 	externalID := ie.Installation.OrgID
 
 	switch action {
-	case "deleted":
+	case installationActionDeleted:
 		h.handleDeletion(ctx, deliveryID, login, externalID, ie.Installation.ID)
-	case "created":
+	case installationActionCreated:
 		h.handleCreation(ctx, deliveryID, login, externalID, ie.Installation.ID)
 	default:
 		slog.InfoContext(ctx, "installation action not supported; ignoring",
@@ -272,10 +277,6 @@ func (h *installationHandler) lookupGithubOrg(ctx context.Context, login string,
 	bool,
 	error,
 ) {
-	if h.client == nil {
-		return nil, false, errors.New("github client is not configured")
-	}
-
 	nameFilter := login
 	includeDeleted := true
 	resp, err := h.client.ListGithubOrgs(ctx, &p42.ListGithubOrgsRequest{Name: &nameFilter, IncludeDeleted: &includeDeleted})
@@ -305,20 +306,7 @@ func (h *installationHandler) addGithubOrg(
 	externalID int64,
 	installation int,
 ) error {
-	if h.client == nil {
-		return errors.New("github client is not configured")
-	}
-	if login == "" {
-		return errors.New("github org login is empty")
-	}
-	if externalID <= 0 {
-		return errors.New("external org id is missing")
-	}
-
 	external := int(externalID)
-	if int64(external) != externalID {
-		return fmt.Errorf("external org id overflows int")
-	}
 
 	req := &p42.AddGithubOrgRequest{
 		OrgID:          uuid.NewString(),
@@ -339,19 +327,10 @@ func (h *installationHandler) updateInstallationID(
 	org *p42.GithubOrg,
 	installation int,
 ) error {
-	if h.client == nil {
-		return errors.New("github client is not configured")
-	}
-	if org == nil {
-		return errors.New("github org is nil")
-	}
-
-	version := org.Version
-	deleted := false
 	req := &p42.UpdateGithubOrgRequest{
 		OrgID:          org.OrgID,
-		Version:        version,
-		Deleted:        &deleted,
+		Version:        org.Version,
+		Deleted:        new(false),
 		InstallationID: &installation,
 	}
 
@@ -363,12 +342,6 @@ func (h *installationHandler) updateInstallationID(
 }
 
 func (h *installationHandler) deleteGithubOrg(ctx context.Context, org *p42.GithubOrg) error {
-	if h.client == nil {
-		return errors.New("github client is not configured")
-	}
-	if org == nil {
-		return errors.New("github org is nil")
-	}
 	if org.Deleted {
 		return nil
 	}

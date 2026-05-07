@@ -9,13 +9,15 @@ import (
 )
 
 const (
-	testOrg           = "myorg"
-	testRepoName      = "myrepo"
-	testFullName      = "myorg/myrepo"
-	testLogin         = "alice"
-	testStateOpen     = "open"
-	testActionCreated = "created"
-	testDeliveryID    = "d-1"
+	testOrg             = "myorg"
+	testRepoName        = "myrepo"
+	testFullName        = "myorg/myrepo"
+	testLogin           = "alice"
+	testStateOpen       = "open"
+	testActionCreated   = "created"
+	testActionSubmitted = "submitted"
+	testActionOpened    = "opened"
+	testDeliveryID      = "d-1"
 )
 
 func testRepository() handlers.Repository {
@@ -127,7 +129,7 @@ func TestEventTypes(t *testing.T) {
 			name: "PullRequestReviewEvent",
 			event: &handlers.PullRequestReviewEvent{
 				EventBase: handlers.EventBase{DeliveryID: "d-4"},
-				Action:    "submitted",
+				Action:    testActionSubmitted,
 				Review: handlers.Review{
 					Body:  &body,
 					Login: "charlie",
@@ -147,7 +149,7 @@ func TestEventTypes(t *testing.T) {
 			name: "PullRequestEvent",
 			event: &handlers.PullRequestEvent{
 				EventBase: handlers.EventBase{DeliveryID: "d-5"},
-				Action:    "opened",
+				Action:    testActionOpened,
 				Number:    9,
 				PullRequest: handlers.PullRequest{
 					ID:      1003,
@@ -178,7 +180,7 @@ func TestPullRequestReviewEvent_NilBody(t *testing.T) {
 	t.Parallel()
 	evt := &handlers.PullRequestReviewEvent{
 		EventBase: handlers.EventBase{DeliveryID: "d-nil-body"},
-		Action:    "submitted",
+		Action:    testActionSubmitted,
 		Review: handlers.Review{
 			Body:  nil,
 			Login: "reviewer",

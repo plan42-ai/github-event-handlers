@@ -21,6 +21,8 @@ github.com/google/go-querystring v1.2.0 h1:yhqkPbu2/OH+V9BfpCVPZkNmUXhb2gBxJArfh
 github.com/google/go-querystring v1.2.0/go.mod h1:8IFJqpSRITyJ8QhQ13bmbeMBDfmeEJZD5A0egEOmkqU=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
 github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
+github.com/plan42-ai/cache v1.0.1 h1:74743RxyLs7p40t8GWbImk8viAHUo93QaSoFtacRkT4=
+github.com/plan42-ai/cache v1.0.1/go.mod h1:bKE57y2bbSRM3MJ08ZGhtukECSw1CNl/A2hVoCy3jXA=
 github.com/plan42-ai/clock v1.1.4 h1:p7GvqjXu6aeoRGQGDpUufaCSkNsWu4faed/xTcRz91o=
 github.com/plan42-ai/clock v1.1.4/go.mod h1:cnNma3ngiQrqwxoVWxSc0YcxK1whkp7i3u6Ts//789A=
 github.com/plan42-ai/concurrency v1.0.4 h1:snHWAc6rfYVAstdDR/+QocxmOdf9A+lA/S+nG2Jcp8E=

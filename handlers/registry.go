@@ -3,9 +3,9 @@ package handlers
 import (
 	"context"
 
-	"github.com/plan42-ai/sdk-go/p42"
-
 	"github.com/plan42-ai/github-event-handlers/github"
+	"github.com/plan42-ai/github-event-handlers/tokens"
+	"github.com/plan42-ai/sdk-go/p42"
 )
 
 // Plan42Client is the subset of the Plan42 API used by event handlers.
@@ -32,6 +32,7 @@ type Config struct {
 	GithubAppName     string
 	GithubAppID       int64
 	Plan42Client      Plan42Client
+	TokenFetcher      tokens.Fetcher
 	LogPayloads       bool
 	CommentTriggerStr string
 	UIURL             string
@@ -51,6 +52,10 @@ func NewHandlerRegistry(cfg Config) *HandlerRegistry {
 		cfg:      cfg,
 	}
 	r.handlers["installation"] = newInstallationHandler(cfg)
+	commentsHandler := newCommentsHandler(cfg)
+	r.handlers["issue_comment"] = commentsHandler
+	r.handlers["pull_request_review_comment"] = commentsHandler
+	r.handlers["pull_request_review"] = commentsHandler
 	return r
 }
 
