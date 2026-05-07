@@ -14,6 +14,7 @@ const (
 	testLogin         = "alice"
 	testStateOpen     = "open"
 	testActionCreated = "created"
+	testDeliveryID    = "d-1"
 )
 
 func testRepository() githubevents.Repository {
@@ -69,7 +70,7 @@ func TestEventTypes(t *testing.T) {
 		{
 			name: "InstallationEvent",
 			event: &githubevents.InstallationEvent{
-				EventBase: githubevents.EventBase{DeliveryID: "d-1"},
+				EventBase: githubevents.EventBase{DeliveryID: testDeliveryID},
 				Action:    testActionCreated,
 				Installation: githubevents.Installation{
 					ID:       100,
@@ -80,7 +81,7 @@ func TestEventTypes(t *testing.T) {
 				},
 			},
 			wantType: "installation",
-			wantID:   "d-1",
+			wantID:   testDeliveryID,
 		},
 		{
 			name: "IssueCommentEvent",
