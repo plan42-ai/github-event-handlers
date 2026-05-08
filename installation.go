@@ -107,7 +107,7 @@ func (h *installationHandler) handle(ctx context.Context, evt Event, _ githubcli
 
 	switch action {
 	case "deleted":
-		h.handleDeletion(ctx, deliveryID, login, externalID)
+		h.handleDeletion(ctx, deliveryID, login, externalID, ie.Installation.ID)
 	case "created":
 		h.handleCreation(ctx, deliveryID, login, externalID, ie.Installation.ID)
 	default:
@@ -212,7 +212,8 @@ func (h *installationHandler) handleDeletion(
 	ctx context.Context,
 	deliveryID,
 	login string,
-	externalID int64,
+	externalID,
+	installationID int64,
 ) {
 	org, found, err := h.lookupGithubOrg(ctx, login, externalID)
 	if err != nil {
@@ -230,6 +231,21 @@ func (h *installationHandler) handleDeletion(
 			"delivery_id", deliveryID,
 			"login", login,
 			"external_org_id", externalID,
+		)
+		return
+	}
+
+	// Guard against stale or replayed deletion events: only delete the org if the
+	// installation ID on the event matches the one currently stored. If a newer
+	// "created" event has already updated the org to a different installation, this
+	// older "deleted" event must be a no-op.
+	if installationID > 0 && org.InstallationID != int(installationID) {
+		slog.InfoContext(ctx, "installation ID mismatch on deletion; ignoring stale event",
+			"delivery_id", deliveryID,
+			"login", login,
+			"external_org_id", externalID,
+			"event_installation_id", installationID,
+			"stored_installation_id", org.InstallationID,
 		)
 		return
 	}

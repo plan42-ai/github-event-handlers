@@ -341,6 +341,40 @@ func TestInstallationHandler_DeletesGithubOrg(t *testing.T) {
 	}
 }
 
+func TestInstallationHandler_DeleteSkipsWhenInstallationIDMismatch(t *testing.T) {
+	// Org was reinstalled under a newer installation ID (99999). A stale "deleted"
+	// event for the old installation (94050746) should be a no-op.
+	client := &fakePlan42Client{
+		listResp: &p42.ListGithubOrgsResponse{
+			Orgs: []p42.GithubOrg{
+				{
+					OrgID:          testOrgID,
+					OrgName:        testInstallationLogin,
+					ExternalOrgID:  17693182,
+					InstallationID: 99999,
+					Version:        12,
+				},
+			},
+		},
+	}
+	registry := newTestRegistry("event-horizon-dev-kg", testAllowedAppID, client)
+	evt := installationEvent("event-horizon-dev-kg", testAllowedAppID, testInstallationLogin, 17693182, 94050746, "deleted")
+	err := registry.Handle(context.Background(), evt, nil)
+	if err != nil {
+		t.Fatalf("Handle returned unexpected error: %v", err)
+	}
+
+	if !client.listCalled {
+		t.Fatalf("expected ListGithubOrgs to be called")
+	}
+	if client.deleteCalled {
+		t.Fatalf("expected DeleteGithubOrg NOT to be called when installation ID does not match")
+	}
+	if client.updateCalled {
+		t.Fatalf("expected UpdateGithubOrg NOT to be called")
+	}
+}
+
 func TestInstallationHandler_EmptyAccountLogin(t *testing.T) {
 	client := &fakePlan42Client{}
 	registry := newTestRegistry("my-app", testAllowedAppID, client)
