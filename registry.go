@@ -45,12 +45,13 @@ type HandlerRegistry struct {
 }
 
 // NewHandlerRegistry constructs a registry with the supplied configuration.
-// Handlers will be registered in subsequent tasks.
 func NewHandlerRegistry(cfg Config) *HandlerRegistry {
-	return &HandlerRegistry{
+	r := &HandlerRegistry{
 		handlers: make(map[string]func(ctx context.Context, evt Event, gh githubclient.GithubAPI)),
 		cfg:      cfg,
 	}
+	r.handlers["installation"] = newInstallationHandler(cfg)
+	return r
 }
 
 // Register adds a handler for the given event type. Subsequent tasks use this to wire
