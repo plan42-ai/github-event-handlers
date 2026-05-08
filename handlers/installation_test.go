@@ -1,11 +1,11 @@
-package githubevents_test
+package handlers_test
 
 import (
 	"context"
 	"errors"
 	"testing"
 
-	githubevents "github.com/plan42-ai/github-event-handlers"
+	"github.com/plan42-ai/github-event-handlers/handlers"
 	"github.com/plan42-ai/sdk-go/p42"
 )
 
@@ -33,10 +33,7 @@ type fakePlan42Client struct {
 	addErr       error
 }
 
-func (f *fakePlan42Client) ListGithubOrgs(_ context.Context, req *p42.ListGithubOrgsRequest) (
-	*p42.ListGithubOrgsResponse,
-	error,
-) {
+func (f *fakePlan42Client) ListGithubOrgs(_ context.Context, req *p42.ListGithubOrgsRequest) (*p42.ListGithubOrgsResponse, error) {
 	f.listCalled = true
 	f.listReq = req
 	if f.listErr != nil {
@@ -78,9 +75,6 @@ func (f *fakePlan42Client) AddGithubOrg(_ context.Context, req *p42.AddGithubOrg
 	return &p42.GithubOrg{}, nil
 }
 
-// Task-related methods required by the Plan42Client interface but unused by the
-// installation handler. Included here to satisfy the interface.
-
 func (f *fakePlan42Client) SearchTasks(_ context.Context, _ *p42.SearchTasksRequest) (*p42.List[p42.Task], error) {
 	return nil, nil
 }
@@ -102,11 +96,11 @@ func (f *fakePlan42Client) UpdateWorkstreamTask(_ context.Context, _ *p42.Update
 }
 
 //nolint:unparam // helper keeps signature aligned with event fields
-func installationEvent(appSlug string, appID int64, login string, externalOrgID, installationID int64, action string) *githubevents.InstallationEvent {
-	return &githubevents.InstallationEvent{
-		EventBase: githubevents.EventBase{DeliveryID: "delivery-1"},
+func installationEvent(appSlug string, appID int64, login string, externalOrgID, installationID int64, action string) *handlers.InstallationEvent {
+	return &handlers.InstallationEvent{
+		EventBase: handlers.EventBase{DeliveryID: "delivery-1"},
 		Action:    action,
-		Installation: githubevents.Installation{
+		Installation: handlers.Installation{
 			ID:       installationID,
 			AppID:    appID,
 			AppSlug:  appSlug,
@@ -116,8 +110,8 @@ func installationEvent(appSlug string, appID int64, login string, externalOrgID,
 	}
 }
 
-func newTestRegistry(appName string, appID int64, client githubevents.Plan42Client) *githubevents.HandlerRegistry {
-	return githubevents.NewHandlerRegistry(githubevents.Config{
+func newTestRegistry(appName string, appID int64, client handlers.Plan42Client) *handlers.HandlerRegistry {
+	return handlers.NewHandlerRegistry(handlers.Config{
 		GithubAppName: appName,
 		GithubAppID:   appID,
 		Plan42Client:  client,
@@ -167,24 +161,14 @@ func TestInstallationHandler_CreatedUpdatesInstallationID(t *testing.T) {
 }
 
 func TestInstallationHandler_SkipsWhenSlugMismatch(t *testing.T) {
-	client := &fakePlan42Client{
-		listResp: &p42.ListGithubOrgsResponse{},
-	}
+	client := &fakePlan42Client{listResp: &p42.ListGithubOrgsResponse{}}
 	registry := newTestRegistry("expected-app", testAllowedAppID, client)
 	evt := installationEvent("other-app", testAllowedAppID, testInstallationLogin, 17693182, 94050746, "created")
-	err := registry.Handle(context.Background(), evt, nil)
-	if err != nil {
+	if err := registry.Handle(context.Background(), evt, nil); err != nil {
 		t.Fatalf("Handle returned unexpected error: %v", err)
 	}
-
-	if client.listCalled {
-		t.Fatalf("expected ListGithubOrgs not to be called on slug mismatch")
-	}
-	if client.updateCalled {
-		t.Fatalf("expected UpdateGithubOrg not to be called on slug mismatch")
-	}
-	if client.deleteCalled {
-		t.Fatalf("expected DeleteGithubOrg not to be called on slug mismatch")
+	if client.listCalled || client.updateCalled || client.deleteCalled {
+		t.Fatal("expected no Plan42 calls on slug mismatch")
 	}
 }
 
@@ -192,22 +176,11 @@ func TestInstallationHandler_SkipsWhenAppIDNotConfigured(t *testing.T) {
 	client := &fakePlan42Client{}
 	registry := newTestRegistry("event-horizon-dev-kg", 0, client)
 	evt := installationEvent("event-horizon-dev-kg", testAllowedAppID, testInstallationLogin, 17693182, 94050746, "created")
-	err := registry.Handle(context.Background(), evt, nil)
-	if err != nil {
+	if err := registry.Handle(context.Background(), evt, nil); err != nil {
 		t.Fatalf("Handle returned unexpected error: %v", err)
 	}
-
-	if client.listCalled {
-		t.Fatalf("expected ListGithubOrgs not to be called when app id missing")
-	}
-	if client.updateCalled {
-		t.Fatalf("expected UpdateGithubOrg not to be called when app id missing")
-	}
-	if client.deleteCalled {
-		t.Fatalf("expected DeleteGithubOrg not to be called when app id missing")
-	}
-	if client.addCalled {
-		t.Fatalf("expected AddGithubOrg not to be called when app id missing")
+	if client.listCalled || client.updateCalled || client.deleteCalled || client.addCalled {
+		t.Fatal("expected no Plan42 calls when app id missing")
 	}
 }
 
@@ -215,22 +188,11 @@ func TestInstallationHandler_SkipsWhenAppIDMismatch(t *testing.T) {
 	client := &fakePlan42Client{}
 	registry := newTestRegistry("event-horizon-dev-kg", testAllowedAppID, client)
 	evt := installationEvent("event-horizon-dev-kg", testAllowedAppID+1, testInstallationLogin, 17693182, 94050746, "created")
-	err := registry.Handle(context.Background(), evt, nil)
-	if err != nil {
+	if err := registry.Handle(context.Background(), evt, nil); err != nil {
 		t.Fatalf("Handle returned unexpected error: %v", err)
 	}
-
-	if client.listCalled {
-		t.Fatalf("expected ListGithubOrgs not to be called when app id mismatched")
-	}
-	if client.updateCalled {
-		t.Fatalf("expected UpdateGithubOrg not to be called when app id mismatched")
-	}
-	if client.deleteCalled {
-		t.Fatalf("expected DeleteGithubOrg not to be called when app id mismatched")
-	}
-	if client.addCalled {
-		t.Fatalf("expected AddGithubOrg not to be called when app id mismatched")
+	if client.listCalled || client.updateCalled || client.deleteCalled || client.addCalled {
+		t.Fatal("expected no Plan42 calls when app id mismatched")
 	}
 }
 
@@ -238,65 +200,35 @@ func TestInstallationHandler_SkipsWhenInstallationUpToDate(t *testing.T) {
 	client := &fakePlan42Client{
 		listResp: &p42.ListGithubOrgsResponse{
 			Orgs: []p42.GithubOrg{
-				{
-					OrgID:          testOrgID,
-					OrgName:        testInstallationLogin,
-					ExternalOrgID:  17693182,
-					InstallationID: 94050746,
-					Version:        3,
-				},
+				{OrgID: testOrgID, OrgName: testInstallationLogin, ExternalOrgID: 17693182, InstallationID: 94050746, Version: 3},
 			},
 		},
 	}
 	registry := newTestRegistry("event-horizon-dev-kg", testAllowedAppID, client)
 	evt := installationEvent("event-horizon-dev-kg", testAllowedAppID, testInstallationLogin, 17693182, 94050746, "created")
-	err := registry.Handle(context.Background(), evt, nil)
-	if err != nil {
+	if err := registry.Handle(context.Background(), evt, nil); err != nil {
 		t.Fatalf("Handle returned unexpected error: %v", err)
 	}
-
 	if !client.listCalled {
-		t.Fatalf("expected ListGithubOrgs to be called")
+		t.Fatal("expected ListGithubOrgs to be called")
 	}
-	if client.updateCalled {
-		t.Fatalf("expected UpdateGithubOrg not to be called when installation id unchanged")
-	}
-	if client.deleteCalled {
-		t.Fatalf("expected DeleteGithubOrg not to be called when installation id unchanged")
+	if client.updateCalled || client.deleteCalled {
+		t.Fatal("expected no update/delete when installation id unchanged")
 	}
 }
 
 func TestInstallationHandler_AddsGithubOrgWhenNotFound(t *testing.T) {
-	client := &fakePlan42Client{
-		listResp: &p42.ListGithubOrgsResponse{
-			Orgs: []p42.GithubOrg{},
-		},
-	}
-
+	client := &fakePlan42Client{listResp: &p42.ListGithubOrgsResponse{Orgs: []p42.GithubOrg{}}}
 	registry := newTestRegistry("event-horizon-dev-kg", testAllowedAppID, client)
 	evt := installationEvent("event-horizon-dev-kg", testAllowedAppID, testInstallationLogin, 17693182, 94050746, "created")
-	err := registry.Handle(context.Background(), evt, nil)
-	if err != nil {
+	if err := registry.Handle(context.Background(), evt, nil); err != nil {
 		t.Fatalf("Handle returned unexpected error: %v", err)
 	}
-
-	if !client.listCalled {
-		t.Fatalf("expected ListGithubOrgs to be called before adding org")
+	if !client.listCalled || !client.addCalled {
+		t.Fatal("expected list then add")
 	}
-	if !client.addCalled {
-		t.Fatalf("expected AddGithubOrg to be called when org not found")
-	}
-	if client.addReq == nil {
-		t.Fatalf("expected add request to be captured")
-	}
-	if client.addReq.OrgName != testInstallationLogin {
-		t.Fatalf("expected org name %s, got %s", testInstallationLogin, client.addReq.OrgName)
-	}
-	if client.addReq.ExternalOrgID != 17693182 {
-		t.Fatalf("expected external org id 17693182, got %d", client.addReq.ExternalOrgID)
-	}
-	if client.addReq.InstallationID != 94050746 {
-		t.Fatalf("expected installation id 94050746, got %d", client.addReq.InstallationID)
+	if client.addReq.OrgName != testInstallationLogin || client.addReq.ExternalOrgID != 17693182 || client.addReq.InstallationID != 94050746 {
+		t.Fatalf("unexpected add request: %+v", client.addReq)
 	}
 }
 
@@ -304,74 +236,41 @@ func TestInstallationHandler_DeletesGithubOrg(t *testing.T) {
 	client := &fakePlan42Client{
 		listResp: &p42.ListGithubOrgsResponse{
 			Orgs: []p42.GithubOrg{
-				{
-					OrgID:          testOrgID,
-					OrgName:        testInstallationLogin,
-					ExternalOrgID:  17693182,
-					InstallationID: 94050746,
-					Version:        11,
-				},
+				{OrgID: testOrgID, OrgName: testInstallationLogin, ExternalOrgID: 17693182, InstallationID: 94050746, Version: 11},
 			},
 		},
 	}
 	registry := newTestRegistry("event-horizon-dev-kg", testAllowedAppID, client)
 	evt := installationEvent("event-horizon-dev-kg", testAllowedAppID, testInstallationLogin, 17693182, 94050746, "deleted")
-	err := registry.Handle(context.Background(), evt, nil)
-	if err != nil {
+	if err := registry.Handle(context.Background(), evt, nil); err != nil {
 		t.Fatalf("Handle returned unexpected error: %v", err)
 	}
-
-	if !client.listCalled {
-		t.Fatalf("expected ListGithubOrgs to be called for deletion")
+	if !client.listCalled || !client.deleteCalled {
+		t.Fatal("expected list then delete")
 	}
-	if client.updateCalled {
-		t.Fatalf("did not expect UpdateGithubOrg when handling deletion")
-	}
-	if !client.deleteCalled {
-		t.Fatalf("expected DeleteGithubOrg to be called")
-	}
-	if client.deleteReq == nil {
-		t.Fatalf("expected delete request to be captured")
-	}
-	if client.deleteReq.OrgID != testOrgID {
-		t.Fatalf("expected delete org id org-123, got %s", client.deleteReq.OrgID)
-	}
-	if client.deleteReq.Version != 11 {
-		t.Fatalf("expected delete version 11, got %d", client.deleteReq.Version)
+	if client.deleteReq.OrgID != testOrgID || client.deleteReq.Version != 11 {
+		t.Fatalf("unexpected delete request: %+v", client.deleteReq)
 	}
 }
 
 func TestInstallationHandler_DeleteSkipsWhenInstallationIDMismatch(t *testing.T) {
-	// Org was reinstalled under a newer installation ID (99999). A stale "deleted"
-	// event for the old installation (94050746) should be a no-op.
 	client := &fakePlan42Client{
 		listResp: &p42.ListGithubOrgsResponse{
 			Orgs: []p42.GithubOrg{
-				{
-					OrgID:          testOrgID,
-					OrgName:        testInstallationLogin,
-					ExternalOrgID:  17693182,
-					InstallationID: 99999,
-					Version:        12,
-				},
+				{OrgID: testOrgID, OrgName: testInstallationLogin, ExternalOrgID: 17693182, InstallationID: 99999, Version: 12},
 			},
 		},
 	}
 	registry := newTestRegistry("event-horizon-dev-kg", testAllowedAppID, client)
 	evt := installationEvent("event-horizon-dev-kg", testAllowedAppID, testInstallationLogin, 17693182, 94050746, "deleted")
-	err := registry.Handle(context.Background(), evt, nil)
-	if err != nil {
+	if err := registry.Handle(context.Background(), evt, nil); err != nil {
 		t.Fatalf("Handle returned unexpected error: %v", err)
 	}
-
 	if !client.listCalled {
-		t.Fatalf("expected ListGithubOrgs to be called")
+		t.Fatal("expected ListGithubOrgs to be called")
 	}
-	if client.deleteCalled {
-		t.Fatalf("expected DeleteGithubOrg NOT to be called when installation ID does not match")
-	}
-	if client.updateCalled {
-		t.Fatalf("expected UpdateGithubOrg NOT to be called")
+	if client.deleteCalled || client.updateCalled {
+		t.Fatal("expected no delete/update when installation ID does not match")
 	}
 }
 
@@ -379,41 +278,30 @@ func TestInstallationHandler_EmptyAccountLogin(t *testing.T) {
 	client := &fakePlan42Client{}
 	registry := newTestRegistry("my-app", testAllowedAppID, client)
 	evt := installationEvent("my-app", testAllowedAppID, "", 17693182, 94050746, "created")
-	err := registry.Handle(context.Background(), evt, nil)
-	if err != nil {
+	if err := registry.Handle(context.Background(), evt, nil); err != nil {
 		t.Fatalf("Handle returned unexpected error: %v", err)
 	}
-
-	if client.listCalled {
-		t.Fatalf("expected ListGithubOrgs not to be called when account login is empty")
-	}
-	if client.addCalled {
-		t.Fatalf("expected AddGithubOrg not to be called when account login is empty")
+	if client.listCalled || client.addCalled {
+		t.Fatal("expected no calls when account login is empty")
 	}
 }
 
 func TestInstallationHandler_NilClient(t *testing.T) {
 	registry := newTestRegistry("my-app", testAllowedAppID, nil)
 	evt := installationEvent("my-app", testAllowedAppID, testInstallationLogin, 17693182, 94050746, "created")
-	err := registry.Handle(context.Background(), evt, nil)
-	if err != nil {
+	if err := registry.Handle(context.Background(), evt, nil); err != nil {
 		t.Fatalf("Handle returned unexpected error: %v", err)
 	}
-	// Should not panic; the handler logs and returns when client is nil.
 }
 
 func TestInstallationHandler_HandlesLookupError(t *testing.T) {
-	client := &fakePlan42Client{
-		listErr: errors.New("boom"),
-	}
+	client := &fakePlan42Client{listErr: errors.New("boom")}
 	registry := newTestRegistry("event-horizon", testAllowedAppID, client)
 	evt := installationEvent("event-horizon", testAllowedAppID, testInstallationLogin, 17693182, 94050746, "created")
-	err := registry.Handle(context.Background(), evt, nil)
-	if err != nil {
+	if err := registry.Handle(context.Background(), evt, nil); err != nil {
 		t.Fatalf("Handle returned unexpected error: %v", err)
 	}
-
 	if !client.listCalled {
-		t.Fatalf("expected ListGithubOrgs to be called when lookup fails")
+		t.Fatal("expected ListGithubOrgs to be called when lookup fails")
 	}
 }
