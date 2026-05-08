@@ -1,13 +1,13 @@
-package githubclient
+package github
 
 import (
 	"net/http"
 	"testing"
 )
 
-func TestNewGithubClient_NilHTTPClient(t *testing.T) {
+func TestNewClient_NilHTTPClient(t *testing.T) {
 	t.Parallel()
-	c, err := NewGithubClient(nil, "tok", "")
+	c, err := NewClient(nil, "tok", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -19,11 +19,11 @@ func TestNewGithubClient_NilHTTPClient(t *testing.T) {
 	}
 }
 
-func TestNewGithubClient_DefaultBaseURL(t *testing.T) {
+func TestNewClient_DefaultBaseURL(t *testing.T) {
 	t.Parallel()
 	// Empty baseURL and the literal public URL should both produce a client without error.
 	for _, base := range []string{"", "https://api.github.com"} {
-		c, err := NewGithubClient(nil, "tok", base)
+		c, err := NewClient(nil, "tok", base)
 		if err != nil {
 			t.Fatalf("baseURL=%q: unexpected error: %v", base, err)
 		}
@@ -33,9 +33,9 @@ func TestNewGithubClient_DefaultBaseURL(t *testing.T) {
 	}
 }
 
-func TestNewGithubClient_CustomBaseURL(t *testing.T) {
+func TestNewClient_CustomBaseURL(t *testing.T) {
 	t.Parallel()
-	c, err := NewGithubClient(nil, "tok", "https://ghes.example.com/api/v3")
+	c, err := NewClient(nil, "tok", "https://ghes.example.com/api/v3")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -50,10 +50,10 @@ func TestNewGithubClient_CustomBaseURL(t *testing.T) {
 	}
 }
 
-func TestNewGithubClient_DoesNotMutateCallerClient(t *testing.T) {
+func TestNewClient_DoesNotMutateCallerClient(t *testing.T) {
 	t.Parallel()
 	original := &http.Client{}
-	_, err := NewGithubClient(original, "tok", "")
+	_, err := NewClient(original, "tok", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

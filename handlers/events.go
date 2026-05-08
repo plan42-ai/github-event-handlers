@@ -1,4 +1,4 @@
-package githubevents
+package handlers
 
 // InstallationEvent is delivered only via webhook. The Events API does not include this
 // event type, and the runner never constructs one.

@@ -1,4 +1,4 @@
-package githubclient
+package github
 
 import (
 	"context"
@@ -6,14 +6,14 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/google/go-github/v81/github"
+	gogh "github.com/google/go-github/v81/github"
 )
 
-// GithubAPI is the handler-facing interface satisfied by *GithubClient. It exists for
+// API is the handler-facing interface satisfied by *Client. It exists for
 // dependency injection in handler tests; the shared library provides one implementation.
 // Methods take only the operation's intrinsic arguments; auth is applied by the
 // authTransport on the underlying http client.
-type GithubAPI interface {
+type API interface {
 	FindIssueCommentWithMarker(ctx context.Context, owner, repo string, issueNumber int, marker string) (*IssueComment, error)
 	CreateIssueComment(ctx context.Context, owner, repo string, issueNumber int, body string) (*IssueComment, error)
 	UpdateIssueComment(ctx context.Context, owner, repo string, commentID int64, body string) (*IssueComment, error)
@@ -38,14 +38,14 @@ type PullRequestUser struct {
 	Login string
 }
 
-// GithubClient is the GitHub API client used by handlers. It is built on top of go-github,
+// Client is the GitHub API client used by handlers. It is built on top of go-github,
 // authenticated with a static token via authTransport.
-type GithubClient struct {
-	gh *github.Client
+type Client struct {
+	gh *gogh.Client
 }
 
-// Compile-time check that *GithubClient satisfies GithubAPI.
-var _ GithubAPI = (*GithubClient)(nil)
+// Compile-time check that *Client satisfies API.
+var _ API = (*Client)(nil)
 
 func coalesce[T comparable](l, r T) T {
 	var zero T
@@ -55,7 +55,7 @@ func coalesce[T comparable](l, r T) T {
 	return r
 }
 
-// NewGithubClient returns a GithubClient authenticated with the supplied token, issuing
+// NewClient returns a Client authenticated with the supplied token, issuing
 // requests against baseURL using httpClient's transport.
 //
 // A nil httpClient falls back to http.DefaultClient. The caller's *http.Client is not
@@ -63,13 +63,13 @@ func coalesce[T comparable](l, r T) T {
 //
 // baseURL "" or "https://api.github.com" targets public GitHub. Any other value retargets
 // the underlying go-github client at a GHES instance via WithEnterpriseURLs.
-func NewGithubClient(httpClient *http.Client, token, baseURL string) (*GithubClient, error) {
+func NewClient(httpClient *http.Client, token, baseURL string) (*Client, error) {
 	ret := *coalesce(httpClient, http.DefaultClient)
 	ret.Transport = &authTransport{
 		wrapped: coalesce(ret.Transport, http.DefaultTransport),
 		token:   token,
 	}
-	gh := github.NewClient(&ret)
+	gh := gogh.NewClient(&ret)
 
 	if baseURL != "" && baseURL != "https://api.github.com" {
 		var err error
@@ -79,7 +79,7 @@ func NewGithubClient(httpClient *http.Client, token, baseURL string) (*GithubCli
 		}
 	}
 
-	return &GithubClient{gh: gh}, nil
+	return &Client{gh: gh}, nil
 }
 
 // authTransport wraps an http.RoundTripper and injects "Authorization: token <token>"
@@ -96,9 +96,9 @@ func (at *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 // FindIssueCommentWithMarker lists issue comments and returns the first one whose body
 // contains the marker string. Returns nil, nil if no matching comment is found.
-func (c *GithubClient) FindIssueCommentWithMarker(ctx context.Context, owner, repo string, issueNumber int, marker string) (*IssueComment, error) {
-	opts := &github.IssueListCommentsOptions{
-		ListOptions: github.ListOptions{PerPage: 100},
+func (c *Client) FindIssueCommentWithMarker(ctx context.Context, owner, repo string, issueNumber int, marker string) (*IssueComment, error) {
+	opts := &gogh.IssueListCommentsOptions{
+		ListOptions: gogh.ListOptions{PerPage: 100},
 	}
 
 	for {
@@ -126,9 +126,9 @@ func (c *GithubClient) FindIssueCommentWithMarker(ctx context.Context, owner, re
 }
 
 // CreateIssueComment creates a comment on the specified issue or pull request.
-func (c *GithubClient) CreateIssueComment(ctx context.Context, owner, repo string, issueNumber int, body string) (*IssueComment, error) {
-	comment, _, err := c.gh.Issues.CreateComment(ctx, owner, repo, issueNumber, &github.IssueComment{
-		Body: github.Ptr(body),
+func (c *Client) CreateIssueComment(ctx context.Context, owner, repo string, issueNumber int, body string) (*IssueComment, error) {
+	comment, _, err := c.gh.Issues.CreateComment(ctx, owner, repo, issueNumber, &gogh.IssueComment{
+		Body: gogh.Ptr(body),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create issue comment: %w", err)
@@ -140,9 +140,9 @@ func (c *GithubClient) CreateIssueComment(ctx context.Context, owner, repo strin
 }
 
 // UpdateIssueComment updates an existing issue comment by ID.
-func (c *GithubClient) UpdateIssueComment(ctx context.Context, owner, repo string, commentID int64, body string) (*IssueComment, error) {
-	comment, _, err := c.gh.Issues.EditComment(ctx, owner, repo, commentID, &github.IssueComment{
-		Body: github.Ptr(body),
+func (c *Client) UpdateIssueComment(ctx context.Context, owner, repo string, commentID int64, body string) (*IssueComment, error) {
+	comment, _, err := c.gh.Issues.EditComment(ctx, owner, repo, commentID, &gogh.IssueComment{
+		Body: gogh.Ptr(body),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("update issue comment: %w", err)
@@ -154,7 +154,7 @@ func (c *GithubClient) UpdateIssueComment(ctx context.Context, owner, repo strin
 }
 
 // GetPullRequest retrieves a pull request by number.
-func (c *GithubClient) GetPullRequest(ctx context.Context, owner, repo string, number int) (*PullRequest, error) {
+func (c *Client) GetPullRequest(ctx context.Context, owner, repo string, number int) (*PullRequest, error) {
 	pr, _, err := c.gh.PullRequests.Get(ctx, owner, repo, number)
 	if err != nil {
 		return nil, fmt.Errorf("get pull request: %w", err)

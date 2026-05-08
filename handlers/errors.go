@@ -1,4 +1,4 @@
-package githubevents
+package handlers
 
 import "errors"
 

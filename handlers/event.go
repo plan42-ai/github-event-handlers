@@ -1,4 +1,4 @@
-package githubevents
+package handlers
 
 // Event is the marker interface implemented by every concrete event type.
 //

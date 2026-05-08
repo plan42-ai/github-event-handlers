@@ -1,10 +1,10 @@
-package githubevents_test
+package handlers_test
 
 import (
 	"testing"
 	"time"
 
-	githubevents "github.com/plan42-ai/github-event-handlers"
+	"github.com/plan42-ai/github-event-handlers/handlers"
 )
 
 const (
@@ -17,8 +17,8 @@ const (
 	testDeliveryID    = "d-1"
 )
 
-func testRepository() githubevents.Repository {
-	return githubevents.Repository{
+func testRepository() handlers.Repository {
+	return handlers.Repository{
 		FullName: testFullName,
 		Name:     testRepoName,
 		Org:      testOrg,
@@ -27,11 +27,11 @@ func testRepository() githubevents.Repository {
 
 // Compile-time checks: every concrete event type must satisfy the Event interface.
 var (
-	_ githubevents.Event = (*githubevents.InstallationEvent)(nil)
-	_ githubevents.Event = (*githubevents.IssueCommentEvent)(nil)
-	_ githubevents.Event = (*githubevents.PullRequestReviewCommentEvent)(nil)
-	_ githubevents.Event = (*githubevents.PullRequestReviewEvent)(nil)
-	_ githubevents.Event = (*githubevents.PullRequestEvent)(nil)
+	_ handlers.Event = (*handlers.InstallationEvent)(nil)
+	_ handlers.Event = (*handlers.IssueCommentEvent)(nil)
+	_ handlers.Event = (*handlers.PullRequestReviewCommentEvent)(nil)
+	_ handlers.Event = (*handlers.PullRequestReviewEvent)(nil)
+	_ handlers.Event = (*handlers.PullRequestEvent)(nil)
 )
 
 func TestEventBase_DeliveryID(t *testing.T) {
@@ -47,7 +47,7 @@ func TestEventBase_DeliveryID(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			base := githubevents.EventBase{DeliveryID: tt.deliveryID}
+			base := handlers.EventBase{DeliveryID: tt.deliveryID}
 			if got := base.GetDeliveryID(); got != tt.deliveryID {
 				t.Errorf("GetDeliveryID() = %q, want %q", got, tt.deliveryID)
 			}
@@ -63,16 +63,16 @@ func TestEventTypes(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		event    githubevents.Event
+		event    handlers.Event
 		wantType string
 		wantID   string
 	}{
 		{
 			name: "InstallationEvent",
-			event: &githubevents.InstallationEvent{
-				EventBase: githubevents.EventBase{DeliveryID: testDeliveryID},
+			event: &handlers.InstallationEvent{
+				EventBase: handlers.EventBase{DeliveryID: testDeliveryID},
 				Action:    testActionCreated,
-				Installation: githubevents.Installation{
+				Installation: handlers.Installation{
 					ID:       100,
 					AppID:    200,
 					AppSlug:  "plan42",
@@ -85,15 +85,15 @@ func TestEventTypes(t *testing.T) {
 		},
 		{
 			name: "IssueCommentEvent",
-			event: &githubevents.IssueCommentEvent{
-				EventBase: githubevents.EventBase{DeliveryID: "d-2"},
+			event: &handlers.IssueCommentEvent{
+				EventBase: handlers.EventBase{DeliveryID: "d-2"},
 				Action:    testActionCreated,
-				Issue: githubevents.Issue{
+				Issue: handlers.Issue{
 					Number:        42,
 					State:         testStateOpen,
 					IsPullRequest: true,
 				},
-				Comment: githubevents.Comment{
+				Comment: handlers.Comment{
 					Body:  "/Plan42",
 					Login: testLogin,
 				},
@@ -104,14 +104,14 @@ func TestEventTypes(t *testing.T) {
 		},
 		{
 			name: "PullRequestReviewCommentEvent",
-			event: &githubevents.PullRequestReviewCommentEvent{
-				EventBase: githubevents.EventBase{DeliveryID: "d-3"},
+			event: &handlers.PullRequestReviewCommentEvent{
+				EventBase: handlers.EventBase{DeliveryID: "d-3"},
 				Action:    testActionCreated,
-				Comment: githubevents.Comment{
+				Comment: handlers.Comment{
 					Body:  "inline comment",
 					Login: "bob",
 				},
-				PullRequest: githubevents.PullRequest{
+				PullRequest: handlers.PullRequest{
 					ID:        1001,
 					Number:    7,
 					State:     testStateOpen,
@@ -126,14 +126,14 @@ func TestEventTypes(t *testing.T) {
 		},
 		{
 			name: "PullRequestReviewEvent",
-			event: &githubevents.PullRequestReviewEvent{
-				EventBase: githubevents.EventBase{DeliveryID: "d-4"},
+			event: &handlers.PullRequestReviewEvent{
+				EventBase: handlers.EventBase{DeliveryID: "d-4"},
 				Action:    "submitted",
-				Review: githubevents.Review{
+				Review: handlers.Review{
 					Body:  &body,
 					Login: "charlie",
 				},
-				PullRequest: githubevents.PullRequest{
+				PullRequest: handlers.PullRequest{
 					ID:     1002,
 					Number: 8,
 					State:  testStateOpen,
@@ -146,11 +146,11 @@ func TestEventTypes(t *testing.T) {
 		},
 		{
 			name: "PullRequestEvent",
-			event: &githubevents.PullRequestEvent{
-				EventBase: githubevents.EventBase{DeliveryID: "d-5"},
+			event: &handlers.PullRequestEvent{
+				EventBase: handlers.EventBase{DeliveryID: "d-5"},
 				Action:    "opened",
 				Number:    9,
-				PullRequest: githubevents.PullRequest{
+				PullRequest: handlers.PullRequest{
 					ID:      1003,
 					Number:  9,
 					State:   testStateOpen,
@@ -181,10 +181,10 @@ func TestEventTypes(t *testing.T) {
 
 func TestPullRequestReviewEvent_NilBody(t *testing.T) {
 	t.Parallel()
-	evt := &githubevents.PullRequestReviewEvent{
-		EventBase: githubevents.EventBase{DeliveryID: "d-nil-body"},
+	evt := &handlers.PullRequestReviewEvent{
+		EventBase: handlers.EventBase{DeliveryID: "d-nil-body"},
 		Action:    "submitted",
-		Review: githubevents.Review{
+		Review: handlers.Review{
 			Body:  nil,
 			Login: "reviewer",
 		},

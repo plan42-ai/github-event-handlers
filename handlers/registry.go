@@ -1,15 +1,15 @@
-package githubevents
+package handlers
 
 import (
 	"context"
 
 	"github.com/plan42-ai/sdk-go/p42"
 
-	"github.com/plan42-ai/github-event-handlers/githubclient"
+	"github.com/plan42-ai/github-event-handlers/github"
 )
 
 // Plan42Client is the subset of the Plan42 API used by event handlers.
-// Renamed from the webhook's "GithubClient" to avoid collision with the new GithubClient type.
+// Renamed from the webhook's "GithubClient" to avoid collision with the new Client type.
 type Plan42Client interface {
 	ListGithubOrgs(ctx context.Context, req *p42.ListGithubOrgsRequest) (*p42.ListGithubOrgsResponse, error)
 	UpdateGithubOrg(ctx context.Context, req *p42.UpdateGithubOrgRequest) (*p42.GithubOrg, error)
@@ -25,8 +25,8 @@ type Plan42Client interface {
 // Config contains options for configuring the handler registry.
 //
 // Compared to the webhook's current Config:
-//   - GithubClient is renamed to Plan42Client (it is a Plan42 API client, not GitHub).
-//   - GithubAPI is removed (now passed per-call to Handle).
+//   - GithubClient was renamed to Plan42Client (it is a Plan42 API client, not GitHub).
+//   - GithubAPI was removed (now passed per-call to Handle).
 //   - GithubJWTSigner is removed (webhook-internal concern).
 type Config struct {
 	GithubAppName     string
@@ -40,14 +40,14 @@ type Config struct {
 // HandlerRegistry holds one handler function per supported EventType and dispatches
 // events to the matching handler via Handle.
 type HandlerRegistry struct {
-	handlers map[string]func(ctx context.Context, evt Event, gh githubclient.GithubAPI)
+	handlers map[string]func(ctx context.Context, evt Event, gh github.API)
 	cfg      Config
 }
 
 // NewHandlerRegistry constructs a registry with the supplied configuration.
 func NewHandlerRegistry(cfg Config) *HandlerRegistry {
 	r := &HandlerRegistry{
-		handlers: make(map[string]func(ctx context.Context, evt Event, gh githubclient.GithubAPI)),
+		handlers: make(map[string]func(ctx context.Context, evt Event, gh github.API)),
 		cfg:      cfg,
 	}
 	r.handlers["installation"] = newInstallationHandler(cfg)
@@ -56,7 +56,7 @@ func NewHandlerRegistry(cfg Config) *HandlerRegistry {
 
 // Register adds a handler for the given event type. Subsequent tasks use this to wire
 // up concrete handler implementations.
-func (r *HandlerRegistry) Register(eventType string, handler func(ctx context.Context, evt Event, gh githubclient.GithubAPI)) {
+func (r *HandlerRegistry) Register(eventType string, handler func(ctx context.Context, evt Event, gh github.API)) {
 	r.handlers[eventType] = handler
 }
 
@@ -64,7 +64,7 @@ func (r *HandlerRegistry) Register(eventType string, handler func(ctx context.Co
 // ErrUnknownEvent if no handler is registered for that type. Returns nil on
 // successful dispatch or when the registry is nil. Individual handler implementations
 // log their own internal errors rather than surfacing them through this return value.
-func (r *HandlerRegistry) Handle(ctx context.Context, evt Event, gh githubclient.GithubAPI) error {
+func (r *HandlerRegistry) Handle(ctx context.Context, evt Event, gh github.API) error {
 	if r == nil {
 		return nil
 	}

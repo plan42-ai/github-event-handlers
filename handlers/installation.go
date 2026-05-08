@@ -1,4 +1,4 @@
-package githubevents
+package handlers
 
 import (
 	"context"
@@ -8,11 +8,11 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/plan42-ai/github-event-handlers/githubclient"
+	"github.com/plan42-ai/github-event-handlers/github"
 	"github.com/plan42-ai/sdk-go/p42"
 )
 
-func newInstallationHandler(cfg Config) func(ctx context.Context, evt Event, gh githubclient.GithubAPI) {
+func newInstallationHandler(cfg Config) func(ctx context.Context, evt Event, gh github.API) {
 	h := &installationHandler{
 		appSlug: strings.TrimSpace(cfg.GithubAppName),
 		appID:   cfg.GithubAppID,
@@ -27,7 +27,7 @@ type installationHandler struct {
 	client  Plan42Client
 }
 
-func (h *installationHandler) handle(ctx context.Context, evt Event, _ githubclient.GithubAPI) {
+func (h *installationHandler) handle(ctx context.Context, evt Event, _ github.API) {
 	ie, ok := evt.(*InstallationEvent)
 	if !ok {
 		slog.ErrorContext(ctx, "installation handler received unexpected event type",
