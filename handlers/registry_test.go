@@ -2,11 +2,11 @@ package handlers_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/plan42-ai/github-event-handlers/github"
 	"github.com/plan42-ai/github-event-handlers/handlers"
+	"github.com/stretchr/testify/require"
 )
 
 func TestHandlerRegistry_NilRegistry(t *testing.T) {
@@ -17,9 +17,7 @@ func TestHandlerRegistry_NilRegistry(t *testing.T) {
 		Action:    testActionCreated,
 	}
 	err := r.Handle(context.Background(), evt, nil)
-	if err != nil {
-		t.Errorf("Handle on nil registry returned error: %v", err)
-	}
+	require.NoError(t, err)
 }
 
 func TestHandlerRegistry_UnknownEvent(t *testing.T) {
@@ -30,9 +28,7 @@ func TestHandlerRegistry_UnknownEvent(t *testing.T) {
 		Action:    testActionCreated,
 	}
 	err := r.Handle(context.Background(), evt, nil)
-	if !errors.Is(err, handlers.ErrUnknownEvent) {
-		t.Errorf("expected ErrUnknownEvent, got %v", err)
-	}
+	require.ErrorIs(t, err, handlers.ErrUnknownEvent)
 }
 
 func TestHandlerRegistry_Dispatch(t *testing.T) {
@@ -59,18 +55,10 @@ func TestHandlerRegistry_Dispatch(t *testing.T) {
 	mockGH := &mockAPI{}
 
 	err := r.Handle(context.Background(), evt, mockGH)
-	if err != nil {
-		t.Fatalf("Handle returned unexpected error: %v", err)
-	}
-	if !called {
-		t.Fatal("handler was not called")
-	}
-	if receivedEvt != evt {
-		t.Error("handler received wrong event")
-	}
-	if receivedGH != mockGH {
-		t.Error("handler received wrong GithubAPI")
-	}
+	require.NoError(t, err)
+	require.True(t, called, "handler was not called")
+	require.Equal(t, evt, receivedEvt, "handler received wrong event")
+	require.Equal(t, mockGH, receivedGH, "handler received wrong GithubAPI")
 }
 
 func TestHandlerRegistry_DispatchCorrectHandler(t *testing.T) {
@@ -91,15 +79,9 @@ func TestHandlerRegistry_DispatchCorrectHandler(t *testing.T) {
 		Action:    "opened",
 	}
 	err := r.Handle(context.Background(), evt, nil)
-	if err != nil {
-		t.Fatalf("Handle returned unexpected error: %v", err)
-	}
-	if commentCalled {
-		t.Error("issue_comment handler should not have been called")
-	}
-	if !prCalled {
-		t.Error("pull_request handler should have been called")
-	}
+	require.NoError(t, err)
+	require.False(t, commentCalled, "issue_comment handler should not have been called")
+	require.True(t, prCalled, "pull_request handler should have been called")
 }
 
 // mockAPI is a minimal mock for testing dispatch.

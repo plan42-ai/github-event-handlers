@@ -9,17 +9,21 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/plan42-ai/openid v1.0.3
 	github.com/plan42-ai/sdk-go v1.0.109
+	github.com/stretchr/testify v1.11.1
 )
 
 require (
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.23 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.23 // indirect
 	github.com/aws/smithy-go v1.25.1 // indirect
+	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/google/go-querystring v1.2.0 // indirect
 	github.com/plan42-ai/clock v1.1.4 // indirect
 	github.com/plan42-ai/concurrency v1.0.4 // indirect
 	github.com/plan42-ai/ecies v1.0.3 // indirect
 	github.com/plan42-ai/sigv4util v1.0.4 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/scottwis/persistent v1.0.8 // indirect
 	golang.org/x/exp v0.0.0-20260508232706-74f9aab9d74a // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	kmstypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 	"github.com/plan42-ai/openid/jwt"
+	"github.com/stretchr/testify/require"
 )
 
 type fakeKMSClient struct {
@@ -35,21 +36,14 @@ func TestSignerUsesKMS(t *testing.T) {
 		Header:  jwt.Header{Algorithm: jwt.AlgorithmRS256, Type: "JWT"},
 		Payload: jwt.Payload{IssuedAt: time.Now(), Expiration: time.Now().Add(time.Minute)},
 	}
-	if err := signer.SignGithubJWT(context.Background(), &token, "alias/github/key"); err != nil {
-		t.Fatalf("sign token: %v", err)
-	}
-	if token.RawSignature == "" {
-		t.Fatalf("expected raw signature to be set")
-	}
-	if client.received == nil || client.received.SigningAlgorithm != kmstypes.SigningAlgorithmSpecRsassaPkcs1V15Sha256 {
-		t.Fatalf("unexpected kms input: %#v", client.received)
-	}
+	require.NoError(t, signer.SignGithubJWT(context.Background(), &token, "alias/github/key"))
+	require.NotEmpty(t, token.RawSignature)
+	require.NotNil(t, client.received)
+	require.Equal(t, kmstypes.SigningAlgorithmSpecRsassaPkcs1V15Sha256, client.received.SigningAlgorithm)
 }
 
 func TestSignerPropagatesError(t *testing.T) {
 	client := &fakeKMSClient{signErr: errors.New("boom")}
 	signer := NewSignerWithClient(client)
-	if err := signer.SignGithubJWT(context.Background(), &jwt.Token{}, "alias"); err == nil {
-		t.Fatalf("expected error")
-	}
+	require.Error(t, signer.SignGithubJWT(context.Background(), &jwt.Token{}, "alias"))
 }
