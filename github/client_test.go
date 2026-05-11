@@ -1,13 +1,14 @@
 package github
 
 import (
+	"context"
 	"net/http"
 	"testing"
 )
 
 func TestNewClient_NilHTTPClient(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient(nil, "", WithToken("tok"))
+	c, err := NewClient(nil, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -23,7 +24,7 @@ func TestNewClient_DefaultBaseURL(t *testing.T) {
 	t.Parallel()
 	// Empty baseURL and the literal public URL should both produce a client without error.
 	for _, base := range []string{"", "https://api.github.com"} {
-		c, err := NewClient(nil, base, WithToken("tok"))
+		c, err := NewClient(nil, base)
 		if err != nil {
 			t.Fatalf("baseURL=%q: unexpected error: %v", base, err)
 		}
@@ -35,7 +36,7 @@ func TestNewClient_DefaultBaseURL(t *testing.T) {
 
 func TestNewClient_CustomBaseURL(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient(nil, "https://ghes.example.com/api/v3", WithToken("tok"))
+	c, err := NewClient(nil, "https://ghes.example.com/api/v3")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -53,7 +54,7 @@ func TestNewClient_CustomBaseURL(t *testing.T) {
 func TestNewClient_DoesNotMutateCallerClient(t *testing.T) {
 	t.Parallel()
 	original := &http.Client{}
-	_, err := NewClient(original, "", WithToken("tok"))
+	_, err := NewClient(original, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -63,7 +64,7 @@ func TestNewClient_DoesNotMutateCallerClient(t *testing.T) {
 	}
 }
 
-func TestWithToken_AppliesAuthHeader(t *testing.T) {
+func TestWithGithubToken_AppliesAuthHeader(t *testing.T) {
 	t.Parallel()
 
 	var captured http.Header
@@ -73,11 +74,9 @@ func TestWithToken_AppliesAuthHeader(t *testing.T) {
 	})
 
 	c := &Client{transport: inner}
-	if err := WithToken("my-secret-token")(c); err != nil {
-		t.Fatalf("WithToken: %v", err)
-	}
+	ctx := WithGithubToken(context.Background(), "my-secret-token")
 
-	req, _ := http.NewRequest(http.MethodGet, "https://api.github.com/repos", nil)
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.github.com/repos", nil)
 	if _, err := c.RoundTrip(req); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

@@ -4,9 +4,13 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/go-github/v81/github"
+	"github.com/plan42-ai/openid/jwt"
 )
 
 // API is the handler-facing interface satisfied by *Client. It exists for
@@ -18,6 +22,7 @@ type API interface {
 	CreateIssueComment(ctx context.Context, owner, repo string, issueNumber int, body string) (*IssueComment, error)
 	UpdateIssueComment(ctx context.Context, owner, repo string, commentID int64, body string) (*IssueComment, error)
 	GetPullRequest(ctx context.Context, owner, repo string, number int) (*PullRequest, error)
+	GetInstallationToken(ctx context.Context, installationID int64) (string, error)
 }
 
 // IssueComment represents a GitHub issue or PR comment.
@@ -41,9 +46,8 @@ type PullRequestUser struct {
 // Client is the GitHub API client used by handlers. It is built on top of go-github,
 // authenticated with a static token via authTransport.
 type Client struct {
-	authProvider authProvider
-	transport    http.RoundTripper
-	gh           *github.Client
+	transport http.RoundTripper
+	gh        *github.Client
 }
 
 // Compile-time check that *Client satisfies API.
@@ -57,9 +61,13 @@ func coalesce[T comparable](l, r T) T {
 	return r
 }
 
-type authProvider interface {
+type AuthProvider interface {
 	AddAuth(req *http.Request) (*http.Request, error)
 }
+
+type contextKey string
+
+var contextKeyAuthProvider = contextKey("authProvider")
 
 type tokenAuthProvider struct {
 	token string
@@ -70,13 +78,78 @@ func (th *tokenAuthProvider) AddAuth(req *http.Request) (*http.Request, error) {
 	return req, nil
 }
 
-type Option func(c *Client) error
+// JWTSigner signs a GitHub App JWT using a KMS-backed key.
+type JWTSigner interface {
+	SignGithubJWT(ctx context.Context, token *jwt.Token, keyAlias string) error
+}
 
-func WithToken(token string) Option {
-	return func(c *Client) error {
-		c.authProvider = &tokenAuthProvider{token: token}
-		return nil
+func WithGithubToken(ctx context.Context, token string) context.Context {
+	return context.WithValue(
+		ctx,
+		contextKeyAuthProvider,
+		&tokenAuthProvider{
+			token: token,
+		},
+	)
+}
+
+func GetAuthProvider(ctx context.Context) AuthProvider {
+	authProvider, _ := ctx.Value(contextKeyAuthProvider).(AuthProvider)
+	return authProvider
+}
+
+type jwtAuthProvider struct {
+	signer   JWTSigner
+	appID    int64
+	keyAlias string
+}
+
+func (j *jwtAuthProvider) AddAuth(req *http.Request) (*http.Request, error) {
+	ctx := req.Context()
+	now := time.Now().UTC()
+	iat := now.Add(-1 * time.Minute)
+	exp := now.Add(8 * time.Minute)
+
+	issStr := strconv.FormatInt(j.appID, 10)
+
+	issURL, err := url.Parse(issStr)
+	if err != nil {
+		return nil, err
 	}
+
+	token := jwt.Token{
+		Header: jwt.Header{
+			Algorithm: jwt.AlgorithmRS256,
+			Type:      "JWT",
+		},
+		Payload: jwt.Payload{
+			Issuer:     issURL,
+			Subject:    issStr,
+			Audience:   "github",
+			IssuedAt:   iat,
+			NotBefore:  iat,
+			Expiration: exp,
+		},
+	}
+
+	if err := j.signer.SignGithubJWT(ctx, &token, j.keyAlias); err != nil {
+		return nil, fmt.Errorf("failed to sign github app jwt: %w", err)
+	}
+	jwtString := token.String()
+	req.Header.Add("Authorization", "bearer "+jwtString)
+	return req, nil
+}
+
+func WithGithubAppAuth(ctx context.Context, signer JWTSigner, appID int64, keyAlias string) context.Context {
+	return context.WithValue(
+		ctx,
+		contextKeyAuthProvider,
+		&jwtAuthProvider{
+			signer:   signer,
+			appID:    appID,
+			keyAlias: keyAlias,
+		},
+	)
 }
 
 // NewClient returns a Client authenticated with the supplied token, issuing
@@ -87,16 +160,10 @@ func WithToken(token string) Option {
 //
 // baseURL "" or "https://api.github.com" targets public GitHub. Any other value retargets
 // the underlying go-github client at a GHES instance via WithEnterpriseURLs.
-func NewClient(httpClient *http.Client, baseURL string, options ...Option) (*Client, error) {
+func NewClient(httpClient *http.Client, baseURL string) (*Client, error) {
 	httpClient = new(*coalesce(httpClient, http.DefaultClient))
 	ret := &Client{
 		transport: coalesce(httpClient.Transport, http.DefaultTransport),
-	}
-
-	for _, option := range options {
-		if err := option(ret); err != nil {
-			return nil, err
-		}
 	}
 	httpClient.Transport = ret
 	ret.gh = github.NewClient(httpClient)
@@ -113,10 +180,10 @@ func NewClient(httpClient *http.Client, baseURL string, options ...Option) (*Cli
 }
 
 func (c *Client) RoundTrip(req *http.Request) (*http.Response, error) {
+	ap := GetAuthProvider(req.Context())
 	var err error
-
-	if c.authProvider != nil {
-		req, err = c.authProvider.AddAuth(req)
+	if ap != nil {
+		req, err = ap.AddAuth(req)
 		if err != nil {
 			return nil, err
 		}
@@ -196,4 +263,12 @@ func (c *Client) GetPullRequest(ctx context.Context, owner, repo string, number 
 			Login: pr.GetUser().GetLogin(),
 		},
 	}, nil
+}
+
+func (c *Client) GetInstallationToken(ctx context.Context, installationID int64) (string, error) {
+	token, _, err := c.gh.Apps.CreateInstallationToken(ctx, installationID, &github.InstallationTokenOptions{})
+	if err != nil {
+		return "", fmt.Errorf("create installation token: %w", err)
+	}
+	return token.GetToken(), nil
 }

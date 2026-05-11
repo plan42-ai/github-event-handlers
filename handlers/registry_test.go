@@ -120,3 +120,7 @@ func (m *mockAPI) UpdateIssueComment(_ context.Context, _, _ string, _ int64, _ 
 func (m *mockAPI) GetPullRequest(_ context.Context, _, _ string, _ int) (*github.PullRequest, error) {
 	return nil, nil
 }
+
+func (m *mockAPI) GetInstallationToken(_ context.Context, _ int64) (string, error) {
+	return "", nil
+}
