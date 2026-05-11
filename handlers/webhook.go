@@ -2,7 +2,7 @@ package handlers
 
 import "github.com/google/go-github/v81/github"
 
-func ParseWebHook(deliverID string, messageType string, payload []byte) (Event, error) {
+func ParseWebhook(deliveryID string, messageType string, payload []byte) (Event, error) {
 	event, err := github.ParseWebHook(messageType, payload)
 	if err != nil {
 		return nil, err
@@ -10,7 +10,7 @@ func ParseWebHook(deliverID string, messageType string, payload []byte) (Event, 
 
 	switch event := event.(type) {
 	case *github.InstallationEvent:
-		return webhookToInstallation(deliverID, event), nil
+		return webhookToInstallation(deliveryID, event), nil
 	default:
 		return nil, ErrUnknownEvent
 	}
