@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/plan42-ai/github-event-handlers/handlers"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -48,9 +49,7 @@ func TestEventBase_DeliveryID(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			base := handlers.EventBase{DeliveryID: tt.deliveryID}
-			if got := base.GetDeliveryID(); got != tt.deliveryID {
-				t.Errorf("GetDeliveryID() = %q, want %q", got, tt.deliveryID)
-			}
+			require.Equal(t, tt.deliveryID, base.GetDeliveryID())
 		})
 	}
 }
@@ -169,12 +168,8 @@ func TestEventTypes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if got := tt.event.EventType(); got != tt.wantType {
-				t.Errorf("EventType() = %q, want %q", got, tt.wantType)
-			}
-			if got := tt.event.GetDeliveryID(); got != tt.wantID {
-				t.Errorf("GetDeliveryID() = %q, want %q", got, tt.wantID)
-			}
+			require.Equal(t, tt.wantType, tt.event.EventType())
+			require.Equal(t, tt.wantID, tt.event.GetDeliveryID())
 		})
 	}
 }
@@ -189,7 +184,5 @@ func TestPullRequestReviewEvent_NilBody(t *testing.T) {
 			Login: "reviewer",
 		},
 	}
-	if evt.Review.Body != nil {
-		t.Error("expected Review.Body to be nil")
-	}
+	require.Nil(t, evt.Review.Body)
 }

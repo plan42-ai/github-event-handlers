@@ -4,20 +4,16 @@ import (
 	"context"
 	"net/http"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewClient_NilHTTPClient(t *testing.T) {
 	t.Parallel()
 	c, err := NewClient(nil, "")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if c == nil {
-		t.Fatal("expected non-nil client")
-	}
-	if c.gh == nil {
-		t.Fatal("expected non-nil go-github client")
-	}
+	require.NoError(t, err)
+	require.NotNil(t, c)
+	require.NotNil(t, c.gh)
 }
 
 func TestNewClient_DefaultBaseURL(t *testing.T) {
@@ -25,43 +21,25 @@ func TestNewClient_DefaultBaseURL(t *testing.T) {
 	// Empty baseURL and the literal public URL should both produce a client without error.
 	for _, base := range []string{"", "https://api.github.com"} {
 		c, err := NewClient(nil, base)
-		if err != nil {
-			t.Fatalf("baseURL=%q: unexpected error: %v", base, err)
-		}
-		if c == nil {
-			t.Fatalf("baseURL=%q: expected non-nil client", base)
-		}
+		require.NoError(t, err, "baseURL=%q", base)
+		require.NotNil(t, c, "baseURL=%q", base)
 	}
 }
 
 func TestNewClient_CustomBaseURL(t *testing.T) {
 	t.Parallel()
 	c, err := NewClient(nil, "https://ghes.example.com/api/v3")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if c == nil {
-		t.Fatal("expected non-nil client")
-	}
-	// The go-github client should be retargeted at the GHES instance.
-	got := c.gh.BaseURL.String()
-	want := "https://ghes.example.com/api/v3/"
-	if got != want {
-		t.Errorf("BaseURL = %q, want %q", got, want)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, c)
+	require.Equal(t, "https://ghes.example.com/api/v3/", c.gh.BaseURL.String())
 }
 
 func TestNewClient_DoesNotMutateCallerClient(t *testing.T) {
 	t.Parallel()
 	original := &http.Client{}
 	_, err := NewClient(original, "")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	// The original client's Transport should remain nil (not mutated).
-	if original.Transport != nil {
-		t.Errorf("caller's http.Client.Transport was mutated, got %T", original.Transport)
-	}
+	require.NoError(t, err)
+	require.Nil(t, original.Transport, "caller's http.Client.Transport should not be mutated")
 }
 
 func TestWithGithubToken_AppliesAuthHeader(t *testing.T) {
@@ -77,14 +55,9 @@ func TestWithGithubToken_AppliesAuthHeader(t *testing.T) {
 	ctx := WithGithubToken(context.Background(), "my-secret-token")
 
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.github.com/repos", nil)
-	if _, err := c.RoundTrip(req); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	want := "token my-secret-token"
-	if got := captured.Get("Authorization"); got != want {
-		t.Errorf("Authorization header = %q, want %q", got, want)
-	}
+	_, err := c.RoundTrip(req)
+	require.NoError(t, err)
+	require.Equal(t, "token my-secret-token", captured.Get("Authorization"))
 }
 
 func TestClient_RoundTrip_NoAuthProvider(t *testing.T) {
@@ -98,13 +71,9 @@ func TestClient_RoundTrip_NoAuthProvider(t *testing.T) {
 
 	c := &Client{transport: inner}
 	req, _ := http.NewRequest(http.MethodGet, "https://api.github.com/repos", nil)
-	if _, err := c.RoundTrip(req); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if got := captured.Get("Authorization"); got != "" {
-		t.Errorf("Authorization header = %q, want empty", got)
-	}
+	_, err := c.RoundTrip(req)
+	require.NoError(t, err)
+	require.Empty(t, captured.Get("Authorization"))
 }
 
 // roundTripFunc adapts a plain function into an http.RoundTripper.

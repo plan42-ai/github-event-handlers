@@ -7,6 +7,7 @@ import (
 
 	"github.com/plan42-ai/github-event-handlers/handlers"
 	"github.com/plan42-ai/sdk-go/p42"
+	"github.com/stretchr/testify/require"
 )
 
 const testAllowedAppID int64 = 1234
@@ -130,70 +131,43 @@ func TestInstallationHandler_CreatedUpdatesInstallationID(t *testing.T) {
 	registry := newTestRegistry("event-horizon-dev-kg", testAllowedAppID, client)
 	evt := installationEvent("event-horizon-dev-kg", testAllowedAppID, testInstallationLogin, 17693182, 94050746, "created")
 	err := registry.Handle(context.Background(), evt, nil)
-	if err != nil {
-		t.Fatalf("Handle returned unexpected error: %v", err)
-	}
+	require.NoError(t, err)
 
-	if !client.listCalled {
-		t.Fatalf("expected ListGithubOrgs to be called")
-	}
-	if client.listReq == nil || client.listReq.Name == nil || *client.listReq.Name != testInstallationLogin {
-		t.Fatalf("expected list request to filter by login, got %#v", client.listReq)
-	}
-	if !client.updateCalled {
-		t.Fatalf("expected UpdateGithubOrg to be called")
-	}
-	if client.updateReq == nil || client.updateReq.InstallationID == nil {
-		t.Fatalf("expected installation ID to be set on update request")
-	}
-	if got := *client.updateReq.InstallationID; got != 94050746 {
-		t.Fatalf("expected installation id 94050746, got %d", got)
-	}
-	if client.updateReq.OrgID != testOrgID {
-		t.Fatalf("expected org id org-123, got %s", client.updateReq.OrgID)
-	}
-	if client.updateReq.Version != 7 {
-		t.Fatalf("expected version 7, got %d", client.updateReq.Version)
-	}
-	if client.deleteCalled {
-		t.Fatalf("did not expect DeleteGithubOrg to be called")
-	}
+	require.True(t, client.listCalled, "expected ListGithubOrgs to be called")
+	require.NotNil(t, client.listReq)
+	require.NotNil(t, client.listReq.Name)
+	require.Equal(t, testInstallationLogin, *client.listReq.Name)
+	require.True(t, client.updateCalled, "expected UpdateGithubOrg to be called")
+	require.NotNil(t, client.updateReq)
+	require.NotNil(t, client.updateReq.InstallationID)
+	require.Equal(t, 94050746, *client.updateReq.InstallationID)
+	require.Equal(t, testOrgID, client.updateReq.OrgID)
+	require.Equal(t, 7, client.updateReq.Version)
+	require.False(t, client.deleteCalled, "did not expect DeleteGithubOrg to be called")
 }
 
 func TestInstallationHandler_SkipsWhenSlugMismatch(t *testing.T) {
 	client := &fakePlan42Client{listResp: &p42.ListGithubOrgsResponse{}}
 	registry := newTestRegistry("expected-app", testAllowedAppID, client)
 	evt := installationEvent("other-app", testAllowedAppID, testInstallationLogin, 17693182, 94050746, "created")
-	if err := registry.Handle(context.Background(), evt, nil); err != nil {
-		t.Fatalf("Handle returned unexpected error: %v", err)
-	}
-	if client.listCalled || client.updateCalled || client.deleteCalled {
-		t.Fatal("expected no Plan42 calls on slug mismatch")
-	}
+	require.NoError(t, registry.Handle(context.Background(), evt, nil))
+	require.False(t, client.listCalled || client.updateCalled || client.deleteCalled, "expected no Plan42 calls on slug mismatch")
 }
 
 func TestInstallationHandler_SkipsWhenAppIDNotConfigured(t *testing.T) {
 	client := &fakePlan42Client{}
 	registry := newTestRegistry("event-horizon-dev-kg", 0, client)
 	evt := installationEvent("event-horizon-dev-kg", testAllowedAppID, testInstallationLogin, 17693182, 94050746, "created")
-	if err := registry.Handle(context.Background(), evt, nil); err != nil {
-		t.Fatalf("Handle returned unexpected error: %v", err)
-	}
-	if client.listCalled || client.updateCalled || client.deleteCalled || client.addCalled {
-		t.Fatal("expected no Plan42 calls when app id missing")
-	}
+	require.NoError(t, registry.Handle(context.Background(), evt, nil))
+	require.False(t, client.listCalled || client.updateCalled || client.deleteCalled || client.addCalled, "expected no Plan42 calls when app id missing")
 }
 
 func TestInstallationHandler_SkipsWhenAppIDMismatch(t *testing.T) {
 	client := &fakePlan42Client{}
 	registry := newTestRegistry("event-horizon-dev-kg", testAllowedAppID, client)
 	evt := installationEvent("event-horizon-dev-kg", testAllowedAppID+1, testInstallationLogin, 17693182, 94050746, "created")
-	if err := registry.Handle(context.Background(), evt, nil); err != nil {
-		t.Fatalf("Handle returned unexpected error: %v", err)
-	}
-	if client.listCalled || client.updateCalled || client.deleteCalled || client.addCalled {
-		t.Fatal("expected no Plan42 calls when app id mismatched")
-	}
+	require.NoError(t, registry.Handle(context.Background(), evt, nil))
+	require.False(t, client.listCalled || client.updateCalled || client.deleteCalled || client.addCalled, "expected no Plan42 calls when app id mismatched")
 }
 
 func TestInstallationHandler_SkipsWhenInstallationUpToDate(t *testing.T) {
@@ -206,30 +180,21 @@ func TestInstallationHandler_SkipsWhenInstallationUpToDate(t *testing.T) {
 	}
 	registry := newTestRegistry("event-horizon-dev-kg", testAllowedAppID, client)
 	evt := installationEvent("event-horizon-dev-kg", testAllowedAppID, testInstallationLogin, 17693182, 94050746, "created")
-	if err := registry.Handle(context.Background(), evt, nil); err != nil {
-		t.Fatalf("Handle returned unexpected error: %v", err)
-	}
-	if !client.listCalled {
-		t.Fatal("expected ListGithubOrgs to be called")
-	}
-	if client.updateCalled || client.deleteCalled {
-		t.Fatal("expected no update/delete when installation id unchanged")
-	}
+	require.NoError(t, registry.Handle(context.Background(), evt, nil))
+	require.True(t, client.listCalled, "expected ListGithubOrgs to be called")
+	require.False(t, client.updateCalled || client.deleteCalled, "expected no update/delete when installation id unchanged")
 }
 
 func TestInstallationHandler_AddsGithubOrgWhenNotFound(t *testing.T) {
 	client := &fakePlan42Client{listResp: &p42.ListGithubOrgsResponse{Orgs: []p42.GithubOrg{}}}
 	registry := newTestRegistry("event-horizon-dev-kg", testAllowedAppID, client)
 	evt := installationEvent("event-horizon-dev-kg", testAllowedAppID, testInstallationLogin, 17693182, 94050746, "created")
-	if err := registry.Handle(context.Background(), evt, nil); err != nil {
-		t.Fatalf("Handle returned unexpected error: %v", err)
-	}
-	if !client.listCalled || !client.addCalled {
-		t.Fatal("expected list then add")
-	}
-	if client.addReq.OrgName != testInstallationLogin || client.addReq.ExternalOrgID != 17693182 || client.addReq.InstallationID != 94050746 {
-		t.Fatalf("unexpected add request: %+v", client.addReq)
-	}
+	require.NoError(t, registry.Handle(context.Background(), evt, nil))
+	require.True(t, client.listCalled, "expected list to be called")
+	require.True(t, client.addCalled, "expected add to be called")
+	require.Equal(t, testInstallationLogin, client.addReq.OrgName)
+	require.Equal(t, 17693182, client.addReq.ExternalOrgID)
+	require.Equal(t, 94050746, client.addReq.InstallationID)
 }
 
 func TestInstallationHandler_DeletesGithubOrg(t *testing.T) {
@@ -242,15 +207,11 @@ func TestInstallationHandler_DeletesGithubOrg(t *testing.T) {
 	}
 	registry := newTestRegistry("event-horizon-dev-kg", testAllowedAppID, client)
 	evt := installationEvent("event-horizon-dev-kg", testAllowedAppID, testInstallationLogin, 17693182, 94050746, "deleted")
-	if err := registry.Handle(context.Background(), evt, nil); err != nil {
-		t.Fatalf("Handle returned unexpected error: %v", err)
-	}
-	if !client.listCalled || !client.deleteCalled {
-		t.Fatal("expected list then delete")
-	}
-	if client.deleteReq.OrgID != testOrgID || client.deleteReq.Version != 11 {
-		t.Fatalf("unexpected delete request: %+v", client.deleteReq)
-	}
+	require.NoError(t, registry.Handle(context.Background(), evt, nil))
+	require.True(t, client.listCalled, "expected list to be called")
+	require.True(t, client.deleteCalled, "expected delete to be called")
+	require.Equal(t, testOrgID, client.deleteReq.OrgID)
+	require.Equal(t, 11, client.deleteReq.Version)
 }
 
 func TestInstallationHandler_DeleteSkipsWhenInstallationIDMismatch(t *testing.T) {
@@ -263,45 +224,29 @@ func TestInstallationHandler_DeleteSkipsWhenInstallationIDMismatch(t *testing.T)
 	}
 	registry := newTestRegistry("event-horizon-dev-kg", testAllowedAppID, client)
 	evt := installationEvent("event-horizon-dev-kg", testAllowedAppID, testInstallationLogin, 17693182, 94050746, "deleted")
-	if err := registry.Handle(context.Background(), evt, nil); err != nil {
-		t.Fatalf("Handle returned unexpected error: %v", err)
-	}
-	if !client.listCalled {
-		t.Fatal("expected ListGithubOrgs to be called")
-	}
-	if client.deleteCalled || client.updateCalled {
-		t.Fatal("expected no delete/update when installation ID does not match")
-	}
+	require.NoError(t, registry.Handle(context.Background(), evt, nil))
+	require.True(t, client.listCalled, "expected ListGithubOrgs to be called")
+	require.False(t, client.deleteCalled || client.updateCalled, "expected no delete/update when installation ID does not match")
 }
 
 func TestInstallationHandler_EmptyAccountLogin(t *testing.T) {
 	client := &fakePlan42Client{}
 	registry := newTestRegistry("my-app", testAllowedAppID, client)
 	evt := installationEvent("my-app", testAllowedAppID, "", 17693182, 94050746, "created")
-	if err := registry.Handle(context.Background(), evt, nil); err != nil {
-		t.Fatalf("Handle returned unexpected error: %v", err)
-	}
-	if client.listCalled || client.addCalled {
-		t.Fatal("expected no calls when account login is empty")
-	}
+	require.NoError(t, registry.Handle(context.Background(), evt, nil))
+	require.False(t, client.listCalled || client.addCalled, "expected no calls when account login is empty")
 }
 
 func TestInstallationHandler_NilClient(t *testing.T) {
 	registry := newTestRegistry("my-app", testAllowedAppID, nil)
 	evt := installationEvent("my-app", testAllowedAppID, testInstallationLogin, 17693182, 94050746, "created")
-	if err := registry.Handle(context.Background(), evt, nil); err != nil {
-		t.Fatalf("Handle returned unexpected error: %v", err)
-	}
+	require.NoError(t, registry.Handle(context.Background(), evt, nil))
 }
 
 func TestInstallationHandler_HandlesLookupError(t *testing.T) {
 	client := &fakePlan42Client{listErr: errors.New("boom")}
 	registry := newTestRegistry("event-horizon", testAllowedAppID, client)
 	evt := installationEvent("event-horizon", testAllowedAppID, testInstallationLogin, 17693182, 94050746, "created")
-	if err := registry.Handle(context.Background(), evt, nil); err != nil {
-		t.Fatalf("Handle returned unexpected error: %v", err)
-	}
-	if !client.listCalled {
-		t.Fatal("expected ListGithubOrgs to be called when lookup fails")
-	}
+	require.NoError(t, registry.Handle(context.Background(), evt, nil))
+	require.True(t, client.listCalled, "expected ListGithubOrgs to be called when lookup fails")
 }
