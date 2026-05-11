@@ -41,7 +41,9 @@ type PullRequestUser struct {
 // Client is the GitHub API client used by handlers. It is built on top of go-github,
 // authenticated with a static token via authTransport.
 type Client struct {
-	gh *github.Client
+	authProvider authProvider
+	transport    http.RoundTripper
+	gh           *github.Client
 }
 
 // Compile-time check that *Client satisfies API.
@@ -55,6 +57,28 @@ func coalesce[T comparable](l, r T) T {
 	return r
 }
 
+type authProvider interface {
+	AddAuth(req *http.Request) (*http.Request, error)
+}
+
+type tokenAuthProvider struct {
+	token string
+}
+
+func (th *tokenAuthProvider) AddAuth(req *http.Request) (*http.Request, error) {
+	req.Header.Set("Authorization", "token "+th.token)
+	return req, nil
+}
+
+type Option func(c *Client) error
+
+func WithToken(token string) Option {
+	return func(c *Client) error {
+		c.authProvider = &tokenAuthProvider{token: token}
+		return nil
+	}
+}
+
 // NewClient returns a Client authenticated with the supplied token, issuing
 // requests against baseURL using httpClient's transport.
 //
@@ -63,35 +87,41 @@ func coalesce[T comparable](l, r T) T {
 //
 // baseURL "" or "https://api.github.com" targets public GitHub. Any other value retargets
 // the underlying go-github client at a GHES instance via WithEnterpriseURLs.
-func NewClient(httpClient *http.Client, token, baseURL string) (*Client, error) {
-	ret := *coalesce(httpClient, http.DefaultClient)
-	ret.Transport = &authTransport{
-		wrapped: coalesce(ret.Transport, http.DefaultTransport),
-		token:   token,
+func NewClient(httpClient *http.Client, baseURL string, options ...Option) (*Client, error) {
+	httpClient = new(*coalesce(httpClient, http.DefaultClient))
+	ret := &Client{
+		transport: coalesce(httpClient.Transport, http.DefaultTransport),
 	}
-	gh := github.NewClient(&ret)
+
+	for _, option := range options {
+		if err := option(ret); err != nil {
+			return nil, err
+		}
+	}
+	httpClient.Transport = ret
+	ret.gh = github.NewClient(httpClient)
 
 	if baseURL != "" && baseURL != "https://api.github.com" {
 		var err error
-		gh, err = gh.WithEnterpriseURLs(baseURL, baseURL)
+		ret.gh, err = ret.gh.WithEnterpriseURLs(baseURL, baseURL)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	return &Client{gh: gh}, nil
+	return ret, nil
 }
 
-// authTransport wraps an http.RoundTripper and injects "Authorization: token <token>"
-// on every outbound request.
-type authTransport struct {
-	wrapped http.RoundTripper
-	token   string
-}
+func (c *Client) RoundTrip(req *http.Request) (*http.Response, error) {
+	var err error
 
-func (at *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	req.Header.Set("Authorization", "token "+at.token)
-	return at.wrapped.RoundTrip(req)
+	if c.authProvider != nil {
+		req, err = c.authProvider.AddAuth(req)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return c.transport.RoundTrip(req)
 }
 
 // FindIssueCommentWithMarker lists issue comments and returns the first one whose body
