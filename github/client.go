@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	gogh "github.com/google/go-github/v81/github"
+	"github.com/google/go-github/v81/github"
 )
 
 // API is the handler-facing interface satisfied by *Client. It exists for
@@ -41,7 +41,7 @@ type PullRequestUser struct {
 // Client is the GitHub API client used by handlers. It is built on top of go-github,
 // authenticated with a static token via authTransport.
 type Client struct {
-	gh *gogh.Client
+	gh *github.Client
 }
 
 // Compile-time check that *Client satisfies API.
@@ -69,7 +69,7 @@ func NewClient(httpClient *http.Client, token, baseURL string) (*Client, error) 
 		wrapped: coalesce(ret.Transport, http.DefaultTransport),
 		token:   token,
 	}
-	gh := gogh.NewClient(&ret)
+	gh := github.NewClient(&ret)
 
 	if baseURL != "" && baseURL != "https://api.github.com" {
 		var err error
@@ -97,8 +97,8 @@ func (at *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 // FindIssueCommentWithMarker lists issue comments and returns the first one whose body
 // contains the marker string. Returns nil, nil if no matching comment is found.
 func (c *Client) FindIssueCommentWithMarker(ctx context.Context, owner, repo string, issueNumber int, marker string) (*IssueComment, error) {
-	opts := &gogh.IssueListCommentsOptions{
-		ListOptions: gogh.ListOptions{PerPage: 100},
+	opts := &github.IssueListCommentsOptions{
+		ListOptions: github.ListOptions{PerPage: 100},
 	}
 
 	for {
@@ -127,8 +127,8 @@ func (c *Client) FindIssueCommentWithMarker(ctx context.Context, owner, repo str
 
 // CreateIssueComment creates a comment on the specified issue or pull request.
 func (c *Client) CreateIssueComment(ctx context.Context, owner, repo string, issueNumber int, body string) (*IssueComment, error) {
-	comment, _, err := c.gh.Issues.CreateComment(ctx, owner, repo, issueNumber, &gogh.IssueComment{
-		Body: gogh.Ptr(body),
+	comment, _, err := c.gh.Issues.CreateComment(ctx, owner, repo, issueNumber, &github.IssueComment{
+		Body: github.Ptr(body),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create issue comment: %w", err)
@@ -141,8 +141,8 @@ func (c *Client) CreateIssueComment(ctx context.Context, owner, repo string, iss
 
 // UpdateIssueComment updates an existing issue comment by ID.
 func (c *Client) UpdateIssueComment(ctx context.Context, owner, repo string, commentID int64, body string) (*IssueComment, error) {
-	comment, _, err := c.gh.Issues.EditComment(ctx, owner, repo, commentID, &gogh.IssueComment{
-		Body: gogh.Ptr(body),
+	comment, _, err := c.gh.Issues.EditComment(ctx, owner, repo, commentID, &github.IssueComment{
+		Body: github.Ptr(body),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("update issue comment: %w", err)
