@@ -7,7 +7,7 @@ import (
 
 func TestNewClient_NilHTTPClient(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient(nil, "tok", "")
+	c, err := NewClient(nil, "", WithToken("tok"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -23,7 +23,7 @@ func TestNewClient_DefaultBaseURL(t *testing.T) {
 	t.Parallel()
 	// Empty baseURL and the literal public URL should both produce a client without error.
 	for _, base := range []string{"", "https://api.github.com"} {
-		c, err := NewClient(nil, "tok", base)
+		c, err := NewClient(nil, base, WithToken("tok"))
 		if err != nil {
 			t.Fatalf("baseURL=%q: unexpected error: %v", base, err)
 		}
@@ -35,7 +35,7 @@ func TestNewClient_DefaultBaseURL(t *testing.T) {
 
 func TestNewClient_CustomBaseURL(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient(nil, "tok", "https://ghes.example.com/api/v3")
+	c, err := NewClient(nil, "https://ghes.example.com/api/v3", WithToken("tok"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -53,7 +53,7 @@ func TestNewClient_CustomBaseURL(t *testing.T) {
 func TestNewClient_DoesNotMutateCallerClient(t *testing.T) {
 	t.Parallel()
 	original := &http.Client{}
-	_, err := NewClient(original, "tok", "")
+	_, err := NewClient(original, "", WithToken("tok"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -63,7 +63,7 @@ func TestNewClient_DoesNotMutateCallerClient(t *testing.T) {
 	}
 }
 
-func TestAuthTransport_SetsHeader(t *testing.T) {
+func TestWithToken_AppliesAuthHeader(t *testing.T) {
 	t.Parallel()
 
 	var captured http.Header
@@ -72,17 +72,39 @@ func TestAuthTransport_SetsHeader(t *testing.T) {
 		return &http.Response{StatusCode: http.StatusOK}, nil
 	})
 
-	at := &authTransport{wrapped: inner, token: "my-secret-token"}
-	req, _ := http.NewRequest(http.MethodGet, "https://api.github.com/repos", nil)
+	c := &Client{transport: inner}
+	if err := WithToken("my-secret-token")(c); err != nil {
+		t.Fatalf("WithToken: %v", err)
+	}
 
-	_, err := at.RoundTrip(req)
-	if err != nil {
+	req, _ := http.NewRequest(http.MethodGet, "https://api.github.com/repos", nil)
+	if _, err := c.RoundTrip(req); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
 	want := "token my-secret-token"
 	if got := captured.Get("Authorization"); got != want {
 		t.Errorf("Authorization header = %q, want %q", got, want)
+	}
+}
+
+func TestClient_RoundTrip_NoAuthProvider(t *testing.T) {
+	t.Parallel()
+
+	var captured http.Header
+	inner := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		captured = req.Header.Clone()
+		return &http.Response{StatusCode: http.StatusOK}, nil
+	})
+
+	c := &Client{transport: inner}
+	req, _ := http.NewRequest(http.MethodGet, "https://api.github.com/repos", nil)
+	if _, err := c.RoundTrip(req); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got := captured.Get("Authorization"); got != "" {
+		t.Errorf("Authorization header = %q, want empty", got)
 	}
 }
 
