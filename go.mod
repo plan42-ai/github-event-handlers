@@ -7,6 +7,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/kms v1.51.1
 	github.com/google/go-github/v81 v81.0.0
 	github.com/google/uuid v1.6.0
+	github.com/plan42-ai/cache v1.0.1
 	github.com/plan42-ai/openid v1.0.3
 	github.com/plan42-ai/sdk-go v1.0.109
 	github.com/stretchr/testify v1.11.1

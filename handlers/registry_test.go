@@ -23,9 +23,9 @@ func TestHandlerRegistry_NilRegistry(t *testing.T) {
 func TestHandlerRegistry_UnknownEvent(t *testing.T) {
 	t.Parallel()
 	r := handlers.NewHandlerRegistry(handlers.Config{})
-	evt := &handlers.IssueCommentEvent{
+	evt := &handlers.PullRequestEvent{
 		EventBase: handlers.EventBase{DeliveryID: testDeliveryID},
-		Action:    testActionCreated,
+		Action:    testActionOpened,
 	}
 	err := r.Handle(context.Background(), evt, nil)
 	require.ErrorIs(t, err, handlers.ErrUnknownEvent)
