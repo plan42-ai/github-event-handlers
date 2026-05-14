@@ -23,10 +23,7 @@ func TestHandlerRegistry_NilRegistry(t *testing.T) {
 func TestHandlerRegistry_UnknownEvent(t *testing.T) {
 	t.Parallel()
 	r := handlers.NewHandlerRegistry(handlers.Config{})
-	evt := &handlers.PullRequestEvent{
-		EventBase: handlers.EventBase{DeliveryID: testDeliveryID},
-		Action:    testActionOpened,
-	}
+	evt := &unknownTestEvent{EventBase: handlers.EventBase{DeliveryID: testDeliveryID}}
 	err := r.Handle(context.Background(), evt, nil)
 	require.ErrorIs(t, err, handlers.ErrUnknownEvent)
 }
@@ -106,3 +103,10 @@ func (m *mockAPI) GetPullRequest(_ context.Context, _, _ string, _ int) (*github
 func (m *mockAPI) GetInstallationToken(_ context.Context, _ int64) (string, error) {
 	return "", nil
 }
+
+// unknownTestEvent is an event type not registered in the handler registry.
+type unknownTestEvent struct {
+	handlers.EventBase
+}
+
+func (*unknownTestEvent) EventType() string { return "unknown_test_event" }
