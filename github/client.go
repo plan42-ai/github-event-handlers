@@ -53,14 +53,6 @@ type Client struct {
 // Compile-time check that *Client satisfies API.
 var _ API = (*Client)(nil)
 
-func coalesce[T comparable](l, r T) T {
-	var zero T
-	if l != zero {
-		return l
-	}
-	return r
-}
-
 type AuthProvider interface {
 	AddAuth(req *http.Request) (*http.Request, error)
 }
@@ -161,9 +153,9 @@ func WithGithubAppAuth(ctx context.Context, signer JWTSigner, appID int64, keyAl
 // baseURL "" or "https://api.github.com" targets public GitHub. Any other value retargets
 // the underlying go-github client at a GHES instance via WithEnterpriseURLs.
 func NewClient(httpClient *http.Client, baseURL string) (*Client, error) {
-	httpClient = new(*coalesce(httpClient, http.DefaultClient))
+	httpClient = new(*util.coalesce(httpClient, http.DefaultClient))
 	ret := &Client{
-		transport: coalesce(httpClient.Transport, http.DefaultTransport),
+		transport: util.coalesce(httpClient.Transport, http.DefaultTransport),
 	}
 	httpClient.Transport = ret
 	ret.gh = github.NewClient(httpClient)
