@@ -74,7 +74,11 @@ func TestCommentsHandlerPostsConflictCommentToTriggeringPRWhenRepoInfoMissing(t 
 		createErr:    &p42.ConflictError{Message: "conflict"},
 	}
 	gh := &fakeGithubAPI{}
-	registry := newRegistryWithTasks(fakeTasks)
+	registry := handlers.NewHandlerRegistry(handlers.Config{
+		Plan42Client:      newFakePlan42Client(fakeTasks),
+		CommentTriggerStr: defaultCommand,
+		UseGithubApp:      true,
+	})
 	reviewEvt := reviewEvent("delivery-3", ptr(defaultCommand), "commenter", "commenter", 55, 321)
 
 	require.NoError(t, registry.Handle(context.Background(), reviewEvt, gh))
@@ -83,15 +87,6 @@ func TestCommentsHandlerPostsConflictCommentToTriggeringPRWhenRepoInfoMissing(t 
 	require.Equal(t, defaultRepoOwner, comment.owner)
 	require.Equal(t, defaultRepoName, comment.repo)
 	require.Equal(t, 55, comment.issueNumber)
-}
-
-func TestCommentsHandlerRequiresGithubForIssueComment(t *testing.T) {
-	fakeTasks := &fakeTaskClient{}
-	registry := newRegistryWithTasks(fakeTasks)
-	issueEvt := issueCommentEvent("delivery-4", defaultCommand, "commenter", 10, true)
-
-	require.NoError(t, registry.Handle(context.Background(), issueEvt, nil))
-	require.Nil(t, fakeTasks.searchReq)
 }
 
 func TestCommentsHandlerUsesTokenFetcherForMismatchComment(t *testing.T) {
@@ -119,6 +114,7 @@ func TestCommentsHandlerUsesTokenFetcherForMismatchComment(t *testing.T) {
 		Plan42Client:      planClient,
 		CommentTriggerStr: defaultCommand,
 		TokenFetcher:      tokenFetcher,
+		UseGithubApp:      true,
 	})
 
 	reviewEvt := reviewCommentEvent("delivery-token", defaultCommand, "other-user", defaultRepoOwner, 21, 456)
@@ -156,6 +152,7 @@ func TestCommentsHandlerUsesFallbackInstallationForConflictComment(t *testing.T)
 		Plan42Client:      planClient,
 		CommentTriggerStr: defaultCommand,
 		TokenFetcher:      tokenFetcher,
+		UseGithubApp:      true,
 	})
 
 	reviewEvt := reviewEvent("delivery-conflict", ptr(defaultCommand), defaultRepoOwner, defaultRepoOwner, 33, 789)
@@ -164,6 +161,75 @@ func TestCommentsHandlerUsesFallbackInstallationForConflictComment(t *testing.T)
 	require.Len(t, gh.createdComments, 1)
 	require.Equal(t, "token conflict-token", gh.lastAuthHeader)
 	require.Equal(t, []int64{55}, tokenFetcher.installationIDs)
+}
+
+func TestCommentsHandlerSkipsConflictCommentWhenGithubAppDisabled(t *testing.T) {
+	fakeTasks := &fakeTaskClient{
+		searchResp: &p42.List[p42.Task]{
+			Items: []p42.Task{{
+				TenantID: testTenantID,
+				TaskID:   defaultTaskID,
+				Version:  3,
+			}},
+		},
+		lastTurnResp: &p42.Turn{TurnIndex: 1},
+		createErr:    &p42.ConflictError{Message: "conflict"},
+	}
+	planClient := &fakePlan42TaskClient{
+		fakeTaskClient: fakeTasks,
+		listOrgsResp: &p42.ListGithubOrgsResponse{Orgs: []p42.GithubOrg{{
+			OrgName:        defaultRepoOwner,
+			InstallationID: 55,
+		}}},
+	}
+	tokenFetcher := &fakeTokenFetcher{token: "should-not-be-used"}
+	gh := &fakeGithubAPI{}
+	registry := handlers.NewHandlerRegistry(handlers.Config{
+		Plan42Client:      planClient,
+		CommentTriggerStr: defaultCommand,
+		TokenFetcher:      tokenFetcher,
+	})
+
+	reviewEvt := reviewEvent("delivery-no-app", ptr(defaultCommand), "commenter", "commenter", 55, 321)
+
+	require.NoError(t, registry.Handle(context.Background(), reviewEvt, gh))
+	require.Empty(t, gh.createdComments)
+	require.Empty(t, tokenFetcher.installationIDs)
+}
+
+func TestCommentsHandlerSkipsAuthorMismatchCommentWhenGithubAppDisabled(t *testing.T) {
+	fakeTasks := &fakeTaskClient{
+		searchResp: &p42.List[p42.Task]{
+			Items: []p42.Task{{
+				TenantID: testTenantID,
+				TaskID:   defaultTaskID,
+				Version:  1,
+			}},
+		},
+		lastTurnResp: &p42.Turn{TurnIndex: 1},
+	}
+	planClient := &fakePlan42TaskClient{
+		fakeTaskClient: fakeTasks,
+		listOrgsResp: &p42.ListGithubOrgsResponse{Orgs: []p42.GithubOrg{{
+			OrgName:        defaultRepoOwner,
+			InstallationID: 77,
+		}}},
+	}
+	tokenFetcher := &fakeTokenFetcher{token: "should-not-be-used"}
+	gh := &fakeGithubAPI{}
+	gh.pullRequestAuthor = defaultRepoOwner
+	registry := handlers.NewHandlerRegistry(handlers.Config{
+		Plan42Client:      planClient,
+		CommentTriggerStr: defaultCommand,
+		TokenFetcher:      tokenFetcher,
+	})
+
+	reviewEvt := reviewCommentEvent("delivery-no-app-mismatch", defaultCommand, "other-user", defaultRepoOwner, 21, 456)
+
+	require.NoError(t, registry.Handle(context.Background(), reviewEvt, gh))
+	require.Empty(t, gh.createdComments)
+	require.Empty(t, tokenFetcher.installationIDs)
+	require.Nil(t, fakeTasks.createReq, "turn should not be created for mismatched author")
 }
 
 // Helpers --------------------------------------------------------------------
