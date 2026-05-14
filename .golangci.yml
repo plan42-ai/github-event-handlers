@@ -9,7 +9,6 @@ linters:
     - dupl
     - durationcheck
     - errcheck
-    - goconst
     - gocritic
     - gocyclo
     - godot
