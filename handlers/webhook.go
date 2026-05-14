@@ -36,7 +36,14 @@ func webhookToInstallation(deliveryID string, evt *github.InstallationEvent) *In
 	}
 }
 
+
+
 func webhookToIssueComment(deliveryID string, evt *github.IssueCommentEvent) *IssueCommentEvent {
+	var installationID *int64
+	if evt.Installation != nil {
+		installationID = evt.Installation.ID
+	}
+
 	return &IssueCommentEvent{
 		EventBase: EventBase{DeliveryID: deliveryID},
 		Action:    evt.GetAction(),
@@ -49,7 +56,8 @@ func webhookToIssueComment(deliveryID string, evt *github.IssueCommentEvent) *Is
 			State:         evt.GetIssue().GetState(),
 			IsPullRequest: evt.GetIssue().IsPullRequest(),
 		},
-		Repository: webhookRepository(evt.GetRepo()),
+		Repository:     webhookRepository(evt.GetRepo()),
+		InstallationID: installationID,
 	}
 }
 

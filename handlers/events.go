@@ -16,10 +16,11 @@ func (*InstallationEvent) EventType() string { return "installation" }
 // Action == "created".
 type IssueCommentEvent struct {
 	EventBase
-	Action     string
-	Issue      Issue
-	Comment    Comment
-	Repository Repository
+	Action         string
+	Issue          Issue
+	Comment        Comment
+	Repository     Repository
+	InstallationID *int64
 }
 
 // EventType returns "issue_comment".

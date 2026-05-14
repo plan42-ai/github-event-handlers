@@ -42,23 +42,76 @@ func TestCommentsHandlerCreatesTurnFromIssueComment(t *testing.T) {
 	require.True(t, gh.getPRCalled)
 }
 
-func TestCommentsHandlerAllowsNilGithubForReviewComment(t *testing.T) {
+func TestCommentsHandlerUsesInstallationTokenForIssueComment(t *testing.T) {
+	installID := int64(9001)
+	gh := &fakeGithubAPI{pullRequestID: 1234, pullRequestState: defaultPRState, pullRequestAuthor: "commenter"}
 	fakeTasks := &fakeTaskClient{
 		searchResp: &p42.List[p42.Task]{
 			Items: []p42.Task{{
-				TenantID: testTenantID,
-				TaskID:   defaultTaskID,
-				Version:  2,
+				TenantID:     testTenantID,
+				TaskID:       defaultTaskID,
+				Version:      7,
+				AssignedToAI: true,
 			}},
 		},
-		lastTurnResp: &p42.Turn{TurnIndex: 5},
+		lastTurnResp: &p42.Turn{TurnIndex: 2},
 	}
-	registry := newRegistryWithTasks(fakeTasks)
-	reviewEvt := reviewCommentEvent("delivery-2", defaultCommand, "commenter", "commenter", 42, 9876)
+	planClient := newFakePlan42Client(fakeTasks)
+	tokenFetcher := &fakeTokenFetcher{token: "install-token"}
+	registry := handlers.NewHandlerRegistry(handlers.Config{
+		Plan42Client:      planClient,
+		CommentTriggerStr: defaultCommand,
+		TokenFetcher:      tokenFetcher,
+		UseGithubApp:      true,
+	})
 
-	require.NoError(t, registry.Handle(context.Background(), reviewEvt, nil))
-	require.NotNil(t, fakeTasks.createReq)
-	require.Equal(t, 6, fakeTasks.createReq.TurnIndex)
+	issueEvt := issueCommentEvent("delivery-install", defaultCommand, "commenter", 17, true)
+	issueEvt.InstallationID = ptr(installID)
+
+	require.NoError(t, registry.Handle(context.Background(), issueEvt, gh))
+	require.Equal(t, []int64{installID}, tokenFetcher.installationIDs)
+	require.Equal(t, "token install-token", gh.lastPRAuthHeader)
+}
+
+func TestCommentsHandlerLooksUpInstallationWhenIssueEventMissingID(t *testing.T) {
+	gh := &fakeGithubAPI{pullRequestID: 1234, pullRequestState: defaultPRState, pullRequestAuthor: "commenter"}
+	fakeTasks := &fakeTaskClient{
+		searchResp: &p42.List[p42.Task]{
+			Items: []p42.Task{{
+				TenantID:     testTenantID,
+				TaskID:       defaultTaskID,
+				Version:      7,
+				AssignedToAI: true,
+			}},
+		},
+		lastTurnResp: &p42.Turn{TurnIndex: 2},
+	}
+	planClient := &fakePlan42TaskClient{
+		fakeTaskClient: fakeTasks,
+		listOrgsResp: &p42.ListGithubOrgsResponse{
+			Orgs: []p42.GithubOrg{
+				{
+					OrgName:        defaultRepoOwner,
+					InstallationID: 77,
+				},
+			},
+		},
+	}
+	tokenFetcher := &fakeTokenFetcher{token: "lookup-token"}
+	registry := handlers.NewHandlerRegistry(handlers.Config{
+		Plan42Client:      planClient,
+		CommentTriggerStr: defaultCommand,
+		TokenFetcher:      tokenFetcher,
+		UseGithubApp:      true,
+	})
+
+	issueEvt := issueCommentEvent("delivery-lookup", defaultCommand, "commenter", 99, true)
+
+	require.NoError(t, registry.Handle(context.Background(), issueEvt, gh))
+	require.Equal(t, []int64{77}, tokenFetcher.installationIDs)
+	require.Equal(t, "token lookup-token", gh.lastPRAuthHeader)
+	require.NotNil(t, planClient.listOrgsReq)
+	require.Equal(t, defaultRepoOwner, *planClient.listOrgsReq.Name)
 }
 
 func TestCommentsHandlerPostsConflictCommentToTriggeringPRWhenRepoInfoMissing(t *testing.T) {
@@ -382,6 +435,7 @@ type fakeGithubAPI struct {
 	getPRCalled       bool
 	createdComments   []recordedComment
 	lastAuthHeader    string
+	lastPRAuthHeader  string
 }
 
 func (f *fakeGithubAPI) FindIssueCommentWithMarker(context.Context, string, string, int, string) (*github.IssueComment, error) {
@@ -398,8 +452,9 @@ func (f *fakeGithubAPI) UpdateIssueComment(context.Context, string, string, int6
 	return nil, nil
 }
 
-func (f *fakeGithubAPI) GetPullRequest(context.Context, string, string, int) (*github.PullRequest, error) {
+func (f *fakeGithubAPI) GetPullRequest(ctx context.Context, _ string, _ string, _ int) (*github.PullRequest, error) {
 	f.getPRCalled = true
+	f.lastPRAuthHeader = f.captureAuthHeader(ctx)
 	return &github.PullRequest{
 		ID:    f.pullRequestID,
 		State: f.pullRequestState,

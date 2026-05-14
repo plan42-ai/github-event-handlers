@@ -254,19 +254,36 @@ func (h *commentsHandler) issueCommentData(
 
 	owner, repo := repoOwnerAndName(evt.Repository)
 	issueNumber := evt.Issue.Number
+
+	installationID := int64(0)
+	if evt.InstallationID != nil {
+		installationID = *evt.InstallationID
+	} else if h.useGithubApp {
+		installationID = h.lookupInstallationID(ctx, deliveryID, owner)
+	}
+
+	if h.useGithubApp {
+		var ok bool
+		ctx, ok = h.ctxWithInstallationToken(ctx, gh, deliveryID, installationID)
+		if !ok {
+			return nil
+		}
+	}
+
 	pr := h.fetchPullRequest(ctx, deliveryID, gh, owner, repo, issueNumber, evt.Issue.State)
 	if pr == nil {
 		return nil
 	}
 
 	data := &commentEventData{
-		CommentBody:   evt.Comment.Body,
-		CommentAuthor: evt.Comment.Login,
-		PRAuthor:      pr.User.Login,
-		Owner:         owner,
-		Repo:          repo,
-		IssueNumber:   issueNumber,
-		PullRequestID: pr.ID,
+		CommentBody:    evt.Comment.Body,
+		CommentAuthor:  evt.Comment.Login,
+		PRAuthor:       pr.User.Login,
+		Owner:          owner,
+		Repo:           repo,
+		IssueNumber:    issueNumber,
+		PullRequestID:  pr.ID,
+		InstallationID: installationID,
 	}
 	h.populateInstallationID(ctx, deliveryID, data)
 	return data
@@ -374,7 +391,7 @@ func (h *commentsHandler) pullRequestReviewData(
 }
 
 func (h *commentsHandler) populateInstallationID(ctx context.Context, deliveryID string, data *commentEventData) {
-	if data == nil || data.Owner == "" || h.tokens == nil {
+	if data == nil || data.Owner == "" || data.InstallationID > 0 || h.tokens == nil {
 		return
 	}
 	data.InstallationID = h.lookupInstallationID(ctx, deliveryID, data.Owner)
