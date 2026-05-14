@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/go-github/v81/github"
+	"github.com/plan42-ai/github-event-handlers/internal/util"
 	"github.com/plan42-ai/openid/jwt"
 )
 
@@ -153,9 +154,9 @@ func WithGithubAppAuth(ctx context.Context, signer JWTSigner, appID int64, keyAl
 // baseURL "" or "https://api.github.com" targets public GitHub. Any other value retargets
 // the underlying go-github client at a GHES instance via WithEnterpriseURLs.
 func NewClient(httpClient *http.Client, baseURL string) (*Client, error) {
-	httpClient = new(*util.coalesce(httpClient, http.DefaultClient))
+	httpClient = new(*util.Coalesce(httpClient, http.DefaultClient))
 	ret := &Client{
-		transport: util.coalesce(httpClient.Transport, http.DefaultTransport),
+		transport: util.Coalesce(httpClient.Transport, http.DefaultTransport),
 	}
 	httpClient.Transport = ret
 	ret.gh = github.NewClient(httpClient)
