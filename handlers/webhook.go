@@ -36,8 +36,6 @@ func webhookToInstallation(deliveryID string, evt *github.InstallationEvent) *In
 	}
 }
 
-
-
 func webhookToIssueComment(deliveryID string, evt *github.IssueCommentEvent) *IssueCommentEvent {
 	var installationID *int64
 	if evt.Installation != nil {
