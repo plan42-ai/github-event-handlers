@@ -15,20 +15,22 @@ import (
 
 func newCommentsHandler(cfg Config) func(ctx context.Context, evt Event, gh github.API) {
 	return (&commentsHandler{
-		command:     strings.TrimSpace(cfg.CommentTriggerStr),
-		tasks:       cfg.Plan42Client,
-		UIURL:       strings.TrimSpace(cfg.UIURL),
-		logPayloads: cfg.LogPayloads,
-		tokens:      cfg.TokenFetcher,
+		command:      strings.TrimSpace(cfg.CommentTriggerStr),
+		tasks:        cfg.Plan42Client,
+		UIURL:        strings.TrimSpace(cfg.UIURL),
+		logPayloads:  cfg.LogPayloads,
+		tokens:       cfg.TokenFetcher,
+		useGithubApp: cfg.UseGithubApp,
 	}).handle
 }
 
 type commentsHandler struct {
-	command     string
-	tasks       Plan42Client
-	UIURL       string
-	logPayloads bool
-	tokens      tokens.Fetcher
+	command      string
+	tasks        Plan42Client
+	UIURL        string
+	logPayloads  bool
+	tokens       tokens.Fetcher
+	useGithubApp bool
 }
 
 func (h *commentsHandler) handle(ctx context.Context, evt Event, gh github.API) { //nolint:cyclop
@@ -51,12 +53,6 @@ func (h *commentsHandler) handle(ctx context.Context, evt Event, gh github.API) 
 
 	switch e := evt.(type) {
 	case *IssueCommentEvent:
-		if gh == nil {
-			slog.ErrorContext(ctx, "github client is required for issue_comment events",
-				"delivery_id", deliveryID,
-			)
-			return
-		}
 		data = h.issueCommentData(ctx, deliveryID, e, gh)
 	case *PullRequestReviewCommentEvent:
 		data = h.reviewCommentData(ctx, deliveryID, e)
@@ -128,6 +124,11 @@ func (h *commentsHandler) handle(ctx context.Context, evt Event, gh github.API) 
 				"task_id", task.TaskID,
 				"error", err,
 			)
+
+			if !h.useGithubApp {
+				return
+			}
+
 			fallback := conflictTarget{owner: data.Owner, repo: data.Repo, issueNumber: data.IssueNumber, installationID: data.InstallationID}
 			for _, target := range h.conflictTargets(ctx, deliveryID, task, fallback) {
 				h.postConflictComment(ctx, gh, deliveryID, target.owner, target.repo, target.issueNumber, task.TaskID, target.installationID)
@@ -184,6 +185,7 @@ func (h *commentsHandler) isCommentByPRAuthor(
 	)
 
 	h.postAuthorMismatchComment(ctx, deliveryID, data, gh)
+
 	return false
 }
 
@@ -193,10 +195,7 @@ func (h *commentsHandler) postAuthorMismatchComment(
 	data *commentEventData,
 	gh github.API,
 ) {
-	if gh == nil {
-		slog.WarnContext(ctx, "github client unavailable; cannot post mismatch comment",
-			"delivery_id", deliveryID,
-		)
+	if !h.useGithubApp {
 		return
 	}
 
@@ -413,7 +412,7 @@ func (h *commentsHandler) lookupTask(ctx context.Context, deliveryID string, prI
 }
 
 func (h *commentsHandler) lookupInstallationID(ctx context.Context, deliveryID, owner string) int64 {
-	if h.tokens == nil || h.tasks == nil {
+	if !h.useGithubApp || h.tokens == nil || h.tasks == nil {
 		return 0
 	}
 	owner = strings.TrimSpace(owner)
@@ -454,13 +453,7 @@ func (h *commentsHandler) postConflictComment(
 	taskID string,
 	installationID int64,
 ) {
-	if gh == nil {
-		slog.WarnContext(ctx, "github client unavailable; cannot post conflict comment",
-			"delivery_id", deliveryID,
-			"owner", owner,
-			"repo", repo,
-			"issue_number", issueNumber,
-		)
+	if !h.useGithubApp {
 		return
 	}
 

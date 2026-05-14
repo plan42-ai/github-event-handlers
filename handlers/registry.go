@@ -36,6 +36,7 @@ type Config struct {
 	LogPayloads       bool
 	CommentTriggerStr string
 	UIURL             string
+	UseGithubApp      bool
 }
 
 // HandlerRegistry holds one handler function per supported EventType and dispatches
