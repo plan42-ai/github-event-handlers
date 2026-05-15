@@ -57,6 +57,7 @@ func NewHandlerRegistry(cfg Config) *HandlerRegistry {
 	r.handlers["issue_comment"] = commentsHandler
 	r.handlers["pull_request_review_comment"] = commentsHandler
 	r.handlers["pull_request_review"] = commentsHandler
+	r.handlers["pull_request"] = newPullRequestHandler(cfg.Plan42Client)
 	return r
 }
 
