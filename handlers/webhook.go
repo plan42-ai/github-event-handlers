@@ -1,6 +1,10 @@
 package handlers
 
-import "github.com/google/go-github/v81/github"
+import (
+	"time"
+
+	"github.com/google/go-github/v81/github"
+)
 
 func ParseWebhook(deliveryID string, messageType string, payload []byte) (Event, error) {
 	event, err := github.ParseWebHook(messageType, payload)
@@ -17,6 +21,8 @@ func ParseWebhook(deliveryID string, messageType string, payload []byte) (Event,
 		return webhookToReviewComment(deliveryID, event), nil
 	case *github.PullRequestReviewEvent:
 		return webhookToReview(deliveryID, event), nil
+	case *github.PullRequestEvent:
+		return webhookToPullRequest(deliveryID, event), nil
 	default:
 		return nil, ErrUnknownEvent
 	}
@@ -88,6 +94,33 @@ func webhookToReview(deliveryID string, evt *github.PullRequestReviewEvent) *Pul
 		},
 		PullRequest: webhookPullRequest(evt.GetPullRequest()),
 		Repository:  webhookRepository(evt.GetRepo()),
+	}
+}
+
+func webhookToPullRequest(deliveryID string, evt *github.PullRequestEvent) *PullRequestEvent {
+	pr := evt.GetPullRequest()
+
+	var updatedAt *time.Time
+	if ts := pr.UpdatedAt; ts != nil && !ts.IsZero() {
+		t := ts.Time
+		updatedAt = &t
+	}
+
+	return &PullRequestEvent{
+		EventBase: EventBase{DeliveryID: deliveryID},
+		Action:    evt.GetAction(),
+		Number:    evt.GetNumber(),
+		PullRequest: PullRequest{
+			ID:        pr.GetID(),
+			Number:    pr.GetNumber(),
+			State:     pr.GetState(),
+			Merged:    pr.GetMerged(),
+			Draft:     pr.GetDraft(),
+			HTMLURL:   pr.GetHTMLURL(),
+			UpdatedAt: updatedAt,
+			Login:     pr.GetUser().GetLogin(),
+		},
+		Repository: webhookRepository(evt.GetRepo()),
 	}
 }
 
