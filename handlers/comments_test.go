@@ -34,12 +34,41 @@ func TestCommentsHandlerCreatesTurnFromIssueComment(t *testing.T) {
 		lastTurnResp: &p42.Turn{TurnIndex: 2},
 	}
 	registry := newRegistryWithTasks(fakeTasks)
-	issueEvt := issueCommentEvent("delivery-1", defaultCommand+" rerun", "commenter", 17, true)
+	issueEvt := issueCommentEvent("delivery-1", defaultCommand+" rerun", 17)
 
 	require.NoError(t, registry.Handle(context.Background(), issueEvt, gh))
 	require.NotNil(t, fakeTasks.createReq)
 	require.Equal(t, 3, fakeTasks.createReq.TurnIndex)
 	require.True(t, gh.getPRCalled)
+	// Without a TenantID configured, SearchTasks should receive nil TenantID.
+	require.Nil(t, fakeTasks.searchReq.TenantID)
+}
+
+func TestCommentsHandlerPassesTenantIDToSearchTasks(t *testing.T) {
+	gh := &fakeGithubAPI{pullRequestID: 1234, pullRequestState: defaultPRState, pullRequestAuthor: "commenter"}
+	fakeTasks := &fakeTaskClient{
+		searchResp: &p42.List[p42.Task]{
+			Items: []p42.Task{{
+				TenantID:     testTenantID,
+				TaskID:       defaultTaskID,
+				Version:      7,
+				AssignedToAI: true,
+			}},
+		},
+		lastTurnResp: &p42.Turn{TurnIndex: 2},
+	}
+	tid := testTenantID
+	registry := handlers.NewHandlerRegistry(handlers.Config{
+		Plan42Client:      newFakePlan42Client(fakeTasks),
+		CommentTriggerStr: defaultCommand,
+		TenantID:          &tid,
+	})
+	issueEvt := issueCommentEvent("delivery-tid", defaultCommand+" rerun", 17)
+
+	require.NoError(t, registry.Handle(context.Background(), issueEvt, gh))
+	require.NotNil(t, fakeTasks.searchReq)
+	require.NotNil(t, fakeTasks.searchReq.TenantID)
+	require.Equal(t, testTenantID, *fakeTasks.searchReq.TenantID)
 }
 
 func TestCommentsHandlerUsesInstallationTokenForIssueComment(t *testing.T) {
@@ -65,7 +94,7 @@ func TestCommentsHandlerUsesInstallationTokenForIssueComment(t *testing.T) {
 		UseGithubApp:      true,
 	})
 
-	issueEvt := issueCommentEvent("delivery-install", defaultCommand, "commenter", 17, true)
+	issueEvt := issueCommentEvent("delivery-install", defaultCommand, 17)
 	issueEvt.InstallationID = ptr(installID)
 
 	require.NoError(t, registry.Handle(context.Background(), issueEvt, gh))
@@ -105,7 +134,7 @@ func TestCommentsHandlerLooksUpInstallationWhenIssueEventMissingID(t *testing.T)
 		UseGithubApp:      true,
 	})
 
-	issueEvt := issueCommentEvent("delivery-lookup", defaultCommand, "commenter", 99, true)
+	issueEvt := issueCommentEvent("delivery-lookup", defaultCommand, 99)
 
 	require.NoError(t, registry.Handle(context.Background(), issueEvt, gh))
 	require.Equal(t, []int64{77}, tokenFetcher.installationIDs)
@@ -294,18 +323,18 @@ func newRegistryWithTasks(tasks *fakeTaskClient) *handlers.HandlerRegistry {
 	})
 }
 
-func issueCommentEvent(deliveryID, body, author string, issueNumber int, isPR bool) *handlers.IssueCommentEvent {
+func issueCommentEvent(deliveryID, body string, issueNumber int) *handlers.IssueCommentEvent {
 	return &handlers.IssueCommentEvent{
 		EventBase: handlers.EventBase{DeliveryID: deliveryID},
 		Action:    testActionCreated,
 		Comment: handlers.Comment{
 			Body:  body,
-			Login: author,
+			Login: "commenter",
 		},
 		Issue: handlers.Issue{
 			Number:        issueNumber,
 			State:         defaultPRState,
-			IsPullRequest: isPR,
+			IsPullRequest: true,
 		},
 		Repository: defaultRepository(),
 	}
