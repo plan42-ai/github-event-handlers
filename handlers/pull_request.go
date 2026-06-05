@@ -21,13 +21,14 @@ const (
 	prStatusUnknown = "unknown"
 )
 
-func newPullRequestHandler(client Plan42Client) func(ctx context.Context, evt Event, gh github.API) {
-	h := &pullRequestHandler{tasks: client}
+func newPullRequestHandler(client Plan42Client, tenantID *string) func(ctx context.Context, evt Event, gh github.API) {
+	h := &pullRequestHandler{tasks: client, tenantID: tenantID}
 	return h.handle
 }
 
 type pullRequestHandler struct {
-	tasks Plan42Client
+	tasks    Plan42Client
+	tenantID *string
 }
 
 func (h *pullRequestHandler) handle(ctx context.Context, evt Event, _ github.API) {
@@ -47,7 +48,7 @@ func (h *pullRequestHandler) handle(ctx context.Context, evt Event, _ github.API
 	status := prStatus(prEvt.PullRequest)
 	statusUpdatedAt := prStatusUpdatedAt(prEvt.PullRequest.UpdatedAt)
 
-	resp, err := h.tasks.SearchTasks(ctx, &p42.SearchTasksRequest{PullRequestID: &prID})
+	resp, err := h.tasks.SearchTasks(ctx, &p42.SearchTasksRequest{PullRequestID: &prID, TenantID: h.tenantID})
 	if err != nil {
 		slog.ErrorContext(ctx, "search tasks failed for pull request",
 			"delivery_id", deliveryID,

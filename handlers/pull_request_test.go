@@ -303,6 +303,25 @@ func TestPullRequestHandlerNoSearchResults(t *testing.T) {
 
 	require.NoError(t, registry.Handle(context.Background(), evt, nil))
 	require.Empty(t, fake.updateReqs)
+	// Without a TenantID configured, SearchTasks should receive nil.
+	require.NotNil(t, fake.searchReq)
+	require.Nil(t, fake.searchReq.TenantID)
+}
+
+func TestPullRequestHandlerPassesTenantIDToSearchTasks(t *testing.T) {
+	t.Parallel()
+
+	tid := testTenantID
+	fake := &recordingPlan42Client{fakeTaskClient: &fakeTaskClient{searchResp: &p42.List[p42.Task]{}}}
+	registry := handlers.NewHandlerRegistry(handlers.Config{Plan42Client: fake, TenantID: &tid})
+
+	updatedAt := time.Now()
+	evt := samplePullRequestEvent("delivery-tid", 999, 1, "open", false, &updatedAt, "")
+
+	require.NoError(t, registry.Handle(context.Background(), evt, nil))
+	require.NotNil(t, fake.searchReq)
+	require.NotNil(t, fake.searchReq.TenantID)
+	require.Equal(t, testTenantID, *fake.searchReq.TenantID)
 }
 
 func TestPullRequestHandlerNilUpdatedAtFallsBackToNow(t *testing.T) {

@@ -37,6 +37,10 @@ type Config struct {
 	CommentTriggerStr string
 	UIURL             string
 	UseGithubApp      bool
+	// TenantID scopes SearchTasks calls to a single tenant. When nil (e.g.
+	// webhook), the search is cross-tenant. When set (e.g. runner), the
+	// runner token only has permission to search within its own tenant.
+	TenantID *string
 }
 
 // HandlerRegistry holds one handler function per supported EventType and dispatches
@@ -57,7 +61,7 @@ func NewHandlerRegistry(cfg Config) *HandlerRegistry {
 	r.handlers["issue_comment"] = commentsHandler
 	r.handlers["pull_request_review_comment"] = commentsHandler
 	r.handlers["pull_request_review"] = commentsHandler
-	r.handlers["pull_request"] = newPullRequestHandler(cfg.Plan42Client)
+	r.handlers["pull_request"] = newPullRequestHandler(cfg.Plan42Client, cfg.TenantID)
 	return r
 }
 

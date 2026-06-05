@@ -21,6 +21,7 @@ func newCommentsHandler(cfg Config) func(ctx context.Context, evt Event, gh gith
 		logPayloads:  cfg.LogPayloads,
 		tokens:       cfg.TokenFetcher,
 		useGithubApp: cfg.UseGithubApp,
+		tenantID:     cfg.TenantID,
 	}).handle
 }
 
@@ -31,6 +32,7 @@ type commentsHandler struct {
 	logPayloads  bool
 	tokens       tokens.Fetcher
 	useGithubApp bool
+	tenantID     *string
 }
 
 func (h *commentsHandler) handle(ctx context.Context, evt Event, gh github.API) { //nolint:cyclop
@@ -398,7 +400,7 @@ func (h *commentsHandler) populateInstallationID(ctx context.Context, deliveryID
 }
 
 func (h *commentsHandler) lookupTask(ctx context.Context, deliveryID string, prID int64) *p42.Task {
-	resp, err := h.tasks.SearchTasks(ctx, &p42.SearchTasksRequest{PullRequestID: &prID})
+	resp, err := h.tasks.SearchTasks(ctx, &p42.SearchTasksRequest{PullRequestID: &prID, TenantID: h.tenantID})
 	if err != nil {
 		slog.ErrorContext(ctx, "search tasks failed",
 			"delivery_id", deliveryID,
