@@ -227,7 +227,7 @@ func (h *commentsHandler) shouldHandleComment(commentBody string) bool {
 	if strings.HasPrefix(commentBody, "<!-- event-horizon") {
 		return false
 	}
-	return slices.Contains(strings.Fields(commentBody), h.command)
+	return slices.Contains(strings.Fields(strings.ToLower(commentBody)), strings.ToLower(h.command))
 }
 
 func (h *commentsHandler) issueCommentData(
