@@ -1,11 +1,13 @@
 package handlers
 
 import (
+	"context"
+	"log/slog"
 	"strings"
-	"time"
 
 	"github.com/google/go-github/v81/github"
 	"github.com/google/uuid"
+	ghapi "github.com/plan42-ai/github-event-handlers/github"
 )
 
 // ParseEventsAPI translates a go-github Events API envelope into a shared
@@ -16,7 +18,7 @@ import (
 //
 // A fresh random UUID is generated for the delivery ID, matching the format
 // webhooks use for X-GitHub-Delivery.
-func ParseEventsAPI(env *github.Event) (Event, error) {
+func ParseEventsAPI(ctx context.Context, env *github.Event, gh ghapi.API) (Event, error) {
 	payload, err := env.ParsePayload()
 	if err != nil {
 		return nil, err
@@ -33,7 +35,7 @@ func ParseEventsAPI(env *github.Event) (Event, error) {
 	case *github.PullRequestReviewEvent:
 		return eventsAPIToReview(deliveryID, p, repo), nil
 	case *github.PullRequestEvent:
-		return eventsAPIToPullRequest(deliveryID, p, repo), nil
+		return eventsAPIToPullRequest(ctx, deliveryID, p, repo, gh), nil
 	default:
 		// Unsupported event type; caller should skip.
 		return nil, nil
@@ -97,30 +99,38 @@ func eventsAPIToReview(deliveryID string, p *github.PullRequestReviewEvent, repo
 	}
 }
 
-func eventsAPIToPullRequest(deliveryID string, p *github.PullRequestEvent, repo Repository) *PullRequestEvent {
-	pr := p.GetPullRequest()
+func eventsAPIToPullRequest(ctx context.Context, deliveryID string, p *github.PullRequestEvent, repo Repository, gh ghapi.API) *PullRequestEvent {
+	apiPR := p.GetPullRequest()
+	number := p.GetNumber()
 
-	var updatedAt *time.Time
-	if ts := pr.UpdatedAt; ts != nil && !ts.IsZero() {
-		t := ts.Time
-		updatedAt = &t
+	pr := PullRequest{
+		ID:     apiPR.GetID(),
+		Number: apiPR.GetNumber(),
+		State:  apiPR.GetState(),
+		Login:  apiPR.GetUser().GetLogin(),
+	}
+
+	full, err := gh.GetPullRequest(ctx, repo.Org, repo.Name, number)
+	if err != nil {
+		slog.ErrorContext(ctx, "events api: failed to fetch pull request; using partial payload",
+			"deliveryID", deliveryID, "owner", repo.Org, "repo", repo.Name, "number", number, "error", err)
+	} else {
+		pr.ID = full.ID
+		pr.Number = full.Number
+		pr.State = full.State
+		pr.Merged = full.Merged
+		pr.Draft = full.Draft
+		pr.HTMLURL = full.HTMLURL
+		pr.UpdatedAt = full.UpdatedAt
+		pr.Login = full.User.Login
 	}
 
 	return &PullRequestEvent{
-		EventBase: EventBase{DeliveryID: deliveryID},
-		Action:    p.GetAction(),
-		Number:    p.GetNumber(),
-		PullRequest: PullRequest{
-			ID:        pr.GetID(),
-			Number:    pr.GetNumber(),
-			State:     pr.GetState(),
-			Merged:    pr.GetMerged(),
-			Draft:     pr.GetDraft(),
-			HTMLURL:   pr.GetHTMLURL(),
-			UpdatedAt: updatedAt,
-			Login:     pr.GetUser().GetLogin(),
-		},
-		Repository: repo,
+		EventBase:   EventBase{DeliveryID: deliveryID},
+		Action:      p.GetAction(),
+		Number:      number,
+		PullRequest: pr,
+		Repository:  repo,
 	}
 }
 

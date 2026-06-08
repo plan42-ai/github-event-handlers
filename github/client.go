@@ -33,10 +33,17 @@ type IssueComment struct {
 }
 
 // PullRequest represents a GitHub pull request as returned by GetPullRequest.
+// It carries the fields handlers need that the Events API payload omits, so the
+// Events API path can back-fill them by fetching the full PR.
 type PullRequest struct {
-	ID    int64
-	State string
-	User  PullRequestUser
+	ID        int64
+	Number    int
+	State     string
+	Merged    bool
+	Draft     bool
+	HTMLURL   string
+	UpdatedAt *time.Time
+	User      PullRequestUser
 }
 
 // PullRequestUser carries the login of a pull request author.
@@ -249,9 +256,21 @@ func (c *Client) GetPullRequest(ctx context.Context, owner, repo string, number 
 	if err != nil {
 		return nil, fmt.Errorf("get pull request: %w", err)
 	}
+
+	var updatedAt *time.Time
+	if ts := pr.UpdatedAt; ts != nil && !ts.IsZero() {
+		t := ts.Time
+		updatedAt = &t
+	}
+
 	return &PullRequest{
-		ID:    pr.GetID(),
-		State: pr.GetState(),
+		ID:        pr.GetID(),
+		Number:    pr.GetNumber(),
+		State:     pr.GetState(),
+		Merged:    pr.GetMerged(),
+		Draft:     pr.GetDraft(),
+		HTMLURL:   pr.GetHTMLURL(),
+		UpdatedAt: updatedAt,
 		User: PullRequestUser{
 			Login: pr.GetUser().GetLogin(),
 		},
