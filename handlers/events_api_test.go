@@ -1,12 +1,56 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
 	"github.com/google/go-github/v81/github"
+	ghapi "github.com/plan42-ai/github-event-handlers/github"
 	"github.com/stretchr/testify/require"
 )
+
+// fakeGithubAPI is a minimal ghapi.API used by the Events API parser tests. Only
+// GetPullRequest is exercised; the other methods satisfy the interface.
+type fakeGithubAPI struct {
+	pullRequestID      int64
+	pullRequestNumber  int
+	pullRequestState   string
+	pullRequestAuthor  string
+	pullRequestMerged  bool
+	pullRequestDraft   bool
+	pullRequestHTMLURL string
+	getPRCalled        bool
+}
+
+func (f *fakeGithubAPI) GetPullRequest(_ context.Context, _, _ string, _ int) (*ghapi.PullRequest, error) {
+	f.getPRCalled = true
+	return &ghapi.PullRequest{
+		ID:      f.pullRequestID,
+		Number:  f.pullRequestNumber,
+		State:   f.pullRequestState,
+		Merged:  f.pullRequestMerged,
+		Draft:   f.pullRequestDraft,
+		HTMLURL: f.pullRequestHTMLURL,
+		User:    ghapi.PullRequestUser{Login: f.pullRequestAuthor},
+	}, nil
+}
+
+func (f *fakeGithubAPI) FindIssueCommentWithMarker(context.Context, string, string, int, string) (*ghapi.IssueComment, error) {
+	return nil, nil
+}
+
+func (f *fakeGithubAPI) CreateIssueComment(context.Context, string, string, int, string) (*ghapi.IssueComment, error) {
+	return nil, nil
+}
+
+func (f *fakeGithubAPI) UpdateIssueComment(context.Context, string, string, int64, string) (*ghapi.IssueComment, error) {
+	return nil, nil
+}
+
+func (f *fakeGithubAPI) GetInstallationToken(context.Context, int64) (string, error) {
+	return "", nil
+}
 
 func rawJSON(v any) *json.RawMessage {
 	data, _ := json.Marshal(v)
@@ -33,7 +77,7 @@ func TestParseEventsAPIIssueComment(t *testing.T) {
 		},
 	}
 
-	evt, err := ParseEventsAPI(env)
+	evt, err := ParseEventsAPI(context.Background(), env, &fakeGithubAPI{})
 	require.NoError(t, err)
 	require.NotNil(t, evt)
 	require.Equal(t, "issue_comment", evt.EventType())
@@ -67,10 +111,23 @@ func TestParseEventsAPIPullRequest(t *testing.T) {
 		},
 	}
 
-	evt, err := ParseEventsAPI(env)
+	// The Events API payload omits merged/draft/html_url/updated_at and the
+	// author login, so the parser back-fills them from a GitHub PR fetch.
+	gh := &fakeGithubAPI{
+		pullRequestID:      999,
+		pullRequestNumber:  10,
+		pullRequestState:   "closed",
+		pullRequestAuthor:  "bob",
+		pullRequestMerged:  true,
+		pullRequestDraft:   false,
+		pullRequestHTMLURL: "https://github.com/acme/widget/pull/10",
+	}
+
+	evt, err := ParseEventsAPI(context.Background(), env, gh)
 	require.NoError(t, err)
 	require.NotNil(t, evt)
 	require.Equal(t, "pull_request", evt.EventType())
+	require.True(t, gh.getPRCalled, "parser should fetch the full PR to back-fill fields")
 
 	pr := evt.(*PullRequestEvent)
 	require.Equal(t, "opened", pr.Action)
@@ -78,6 +135,9 @@ func TestParseEventsAPIPullRequest(t *testing.T) {
 	require.Equal(t, "bob", pr.PullRequest.Login)
 	require.Equal(t, "acme", pr.Repository.Org)
 	require.Equal(t, "widget", pr.Repository.Name)
+	// Fields back-filled from the fetched PR, not present in the Events API payload.
+	require.True(t, pr.PullRequest.Merged)
+	require.Equal(t, "https://github.com/acme/widget/pull/10", pr.PullRequest.HTMLURL)
 }
 
 func TestParseEventsAPIUnsupportedType(t *testing.T) {
@@ -93,7 +153,7 @@ func TestParseEventsAPIUnsupportedType(t *testing.T) {
 		},
 	}
 
-	evt, err := ParseEventsAPI(env)
+	evt, err := ParseEventsAPI(context.Background(), env, &fakeGithubAPI{})
 	require.NoError(t, err)
 	require.Nil(t, evt, "unsupported types should return nil, nil")
 }
@@ -135,7 +195,7 @@ func TestParseEventsAPIReviewNormalizesAction(t *testing.T) {
 		},
 	}
 
-	evt, err := ParseEventsAPI(env)
+	evt, err := ParseEventsAPI(context.Background(), env, &fakeGithubAPI{})
 	require.NoError(t, err)
 	require.NotNil(t, evt)
 
@@ -167,7 +227,7 @@ func TestParseEventsAPIReviewPreservesOtherActions(t *testing.T) {
 		},
 	}
 
-	evt, err := ParseEventsAPI(env)
+	evt, err := ParseEventsAPI(context.Background(), env, &fakeGithubAPI{})
 	require.NoError(t, err)
 	require.NotNil(t, evt)
 
