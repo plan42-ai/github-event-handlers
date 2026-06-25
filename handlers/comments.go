@@ -116,6 +116,13 @@ func (h *commentsHandler) handle(ctx context.Context, evt Event, gh github.API) 
 		TaskVersion:  task.Version,
 		WorkstreamID: task.WorkstreamID,
 		Prompt:       "User requested changes via Github comments.",
+		GithubCommentSource: &p42.GithubCommentSource{
+			Owner:          data.Owner,
+			Repo:           data.Repo,
+			IssueNumber:    data.IssueNumber,
+			PullRequestID:  data.PullRequestID,
+			InstallationID: data.InstallationID,
+		},
 	}
 
 	if _, err := h.tasks.CreateTurn(ctx, req); err != nil {
@@ -131,10 +138,7 @@ func (h *commentsHandler) handle(ctx context.Context, evt Event, gh github.API) 
 				return
 			}
 
-			fallback := conflictTarget{owner: data.Owner, repo: data.Repo, issueNumber: data.IssueNumber, installationID: data.InstallationID}
-			for _, target := range h.conflictTargets(ctx, deliveryID, task, fallback) {
-				h.postConflictComment(ctx, gh, deliveryID, target.owner, target.repo, target.issueNumber, task.TaskID, target.installationID)
-			}
+			h.postConflictComment(ctx, gh, deliveryID, data.Owner, data.Repo, data.IssueNumber, task.TaskID, data.InstallationID)
 			return
 		}
 		slog.ErrorContext(ctx, "failed to create new turn",
@@ -161,13 +165,6 @@ type commentEventData struct {
 	IssueNumber    int
 	PullRequestID  int64
 	InstallationID int64
-}
-
-type conflictTarget struct {
-	owner          string
-	repo           string
-	issueNumber    int
-	installationID int64
 }
 
 func (h *commentsHandler) isCommentByPRAuthor(
@@ -544,30 +541,6 @@ func (h *commentsHandler) taskLink(taskID string) string {
 		return ""
 	}
 	return fmt.Sprintf(`<a href="%s/tasks/%s">%s</a>`, h.UIURL, taskID, taskID)
-}
-
-func (h *commentsHandler) conflictTargets(ctx context.Context, deliveryID string, task *p42.Task, fallback conflictTarget) []conflictTarget {
-	var targets []conflictTarget
-	for key, repoInfo := range task.RepoInfo {
-		parts := strings.SplitN(key, "/", 2)
-		if len(parts) != 2 || repoInfo == nil || repoInfo.PRNumber == nil {
-			continue
-		}
-		installationID := h.lookupInstallationID(ctx, deliveryID, parts[0])
-		targets = append(targets, conflictTarget{
-			owner:          parts[0],
-			repo:           parts[1],
-			issueNumber:    *repoInfo.PRNumber,
-			installationID: installationID,
-		})
-	}
-	if len(targets) == 0 && fallback.owner != "" && fallback.repo != "" && fallback.issueNumber > 0 {
-		if fallback.installationID == 0 {
-			fallback.installationID = h.lookupInstallationID(ctx, deliveryID, fallback.owner)
-		}
-		targets = append(targets, fallback)
-	}
-	return targets
 }
 
 func (h *commentsHandler) fetchPullRequest(

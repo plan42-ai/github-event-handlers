@@ -28,3 +28,5 @@ require (
 	golang.org/x/exp v0.0.0-20260603202125-055de637280b // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace github.com/plan42-ai/sdk-go => ../sdk-go
