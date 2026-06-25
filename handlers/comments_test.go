@@ -39,6 +39,7 @@ func TestCommentsHandlerCreatesTurnFromIssueComment(t *testing.T) {
 	require.NoError(t, registry.Handle(context.Background(), issueEvt, gh))
 	require.NotNil(t, fakeTasks.createReq)
 	require.Equal(t, 3, fakeTasks.createReq.TurnIndex)
+	require.Equal(t, &p42.GithubCommentSource{Owner: defaultRepoOwner, Repo: defaultRepoName, IssueNumber: 17, PullRequestID: 1234}, fakeTasks.createReq.GithubCommentSource)
 	require.True(t, gh.getPRCalled)
 	// Without a TenantID configured, SearchTasks should receive nil TenantID.
 	require.Nil(t, fakeTasks.searchReq.TenantID)
@@ -169,6 +170,37 @@ func TestCommentsHandlerPostsConflictCommentToTriggeringPRWhenRepoInfoMissing(t 
 	require.Equal(t, defaultRepoOwner, comment.owner)
 	require.Equal(t, defaultRepoName, comment.repo)
 	require.Equal(t, 55, comment.issueNumber)
+}
+
+func TestCommentsHandlerPostsConflictCommentOnlyToTriggeringPR(t *testing.T) {
+	otherPRNumber := 99
+	fakeTasks := &fakeTaskClient{
+		searchResp: &p42.List[p42.Task]{
+			Items: []p42.Task{{
+				TenantID: testTenantID,
+				TaskID:   defaultTaskID,
+				Version:  3,
+				RepoInfo: map[string]*p42.RepoInfo{
+					defaultRepoOwner + "/other": {PRNumber: &otherPRNumber},
+				},
+			}},
+		},
+		lastTurnResp: &p42.Turn{TurnIndex: 1},
+		createErr:    &p42.ConflictError{Message: "conflict"},
+	}
+	gh := &fakeGithubAPI{}
+	registry := handlers.NewHandlerRegistry(handlers.Config{
+		Plan42Client:      newFakePlan42Client(fakeTasks),
+		CommentTriggerStr: defaultCommand,
+		UseGithubApp:      true,
+	})
+	reviewEvt := reviewEvent("delivery-trigger-only", ptr(defaultCommand), "commenter", "commenter", 55, 321)
+
+	require.NoError(t, registry.Handle(context.Background(), reviewEvt, gh))
+	require.Len(t, gh.createdComments, 1)
+	require.Equal(t, defaultRepoOwner, gh.createdComments[0].owner)
+	require.Equal(t, defaultRepoName, gh.createdComments[0].repo)
+	require.Equal(t, 55, gh.createdComments[0].issueNumber)
 }
 
 func TestCommentsHandlerUsesTokenFetcherForMismatchComment(t *testing.T) {
